@@ -410,10 +410,10 @@ with tab1:
                 itemHeight: 12,
             }},
             graphic: [
-                {{ type: 'text', left: 50, top: 38, style: {{ text: 'SOURCE SYSTEMS', fill: '#8899aa', fontSize: 13, fontWeight: 'bold', letterSpacing: 2 }} }},
-                {{ type: 'text', left: 370, top: 38, style: {{ text: 'DSS DATABASE', fill: '#8899aa', fontSize: 13, fontWeight: 'bold', letterSpacing: 2 }} }},
-                {{ type: 'text', left: 710, top: 38, style: {{ text: 'MODULES', fill: '#8899aa', fontSize: 13, fontWeight: 'bold', letterSpacing: 2 }} }},
-                {{ type: 'rect', left: 0, top: 58, shape: {{ width: 950, height: 1 }}, style: {{ fill: '#333' }} }},
+                {{ type: 'text', left: '12%', top: 38, style: {{ text: 'SOURCE SYSTEMS', fill: '#8899aa', fontSize: 13, fontWeight: 'bold', letterSpacing: 2, textAlign: 'center' }} }},
+                {{ type: 'text', left: '48%', top: 38, style: {{ text: 'DSS DATABASE', fill: '#8899aa', fontSize: 13, fontWeight: 'bold', letterSpacing: 2, textAlign: 'center' }} }},
+                {{ type: 'text', left: '85%', top: 38, style: {{ text: 'MODULES', fill: '#8899aa', fontSize: 13, fontWeight: 'bold', letterSpacing: 2, textAlign: 'center' }} }},
+                {{ type: 'rect', left: 0, top: 58, shape: {{ width: 2000, height: 1 }}, style: {{ fill: '#333' }} }},
             ],
             series: [{{
                 type: 'graph',
