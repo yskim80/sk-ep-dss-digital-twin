@@ -175,16 +175,20 @@ with tab1:
     flow_nodes = []
     flow_links = []
 
+    # 노드 y좌표: 헤더 영역(0~60) 확보 후 70부터 배치
+    NODE_Y_START = 70
+    NODE_Y_RANGE = 560
+
     # 소스 시스템 노드 (좌측 열)
     src_list = list(SOURCE_SYSTEMS.items())
-    src_y_step = 520 // max(len(src_list), 1)
+    src_y_step = NODE_Y_RANGE // max(len(src_list), 1)
     for i, (sys_id, sys_info) in enumerate(src_list):
         table_count = len(sys_info["tables"])
         flow_nodes.append({
             "id": f"src_{sys_id}",
             "name": sys_info["name"],
             "x": 80,
-            "y": 50 + i * src_y_step,
+            "y": NODE_Y_START + i * src_y_step,
             "category": 0,
             "table_count": table_count,
             "owner": sys_info["owner"],
@@ -194,14 +198,14 @@ with tab1:
 
     # DSS 테이블 노드 (중앙 열)
     tbl_list = list(db_stats.keys())
-    tbl_y_step = 520 // max(len(tbl_list), 1)
+    tbl_y_step = NODE_Y_RANGE // max(len(tbl_list), 1)
     for i, table_name in enumerate(tbl_list):
         stats = db_stats[table_name]
         flow_nodes.append({
             "id": f"tbl_{table_name}",
             "name": table_name,
             "x": 420,
-            "y": 30 + i * tbl_y_step,
+            "y": NODE_Y_START + i * tbl_y_step,
             "category": 1,
             "rows": stats["rows"],
             "columns": stats["columns"],
@@ -211,13 +215,13 @@ with tab1:
     # 모듈 노드 (우측 열)
     module_colors_map = {"M1": "#2F5496", "M2": "#548235", "M3": "#BF8F00", "M4": "#7030A0", "M5": "#C00000", "M6": "#0097A7"}
     mod_list = list(MODULES.items())
-    mod_y_step = 520 // max(len(mod_list), 1)
+    mod_y_step = NODE_Y_RANGE // max(len(mod_list), 1)
     for i, (mod_key, mod_name) in enumerate(mod_list):
         flow_nodes.append({
             "id": f"mod_{mod_key}",
             "name": f"{mod_key} {mod_name}",
             "x": 760,
-            "y": 50 + i * mod_y_step,
+            "y": NODE_Y_START + i * mod_y_step,
             "category": 2,
             "color": module_colors_map.get(mod_key, "#666"),
         })
@@ -259,7 +263,7 @@ with tab1:
     flow_links_json = json.dumps(flow_links, ensure_ascii=False)
 
     html_graph = f"""
-    <div id="data-flow" style="width:100%;height:720px;background:#0e1117;"></div>
+    <div id="data-flow" style="width:100%;height:780px;background:#0e1117;"></div>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
     <script>
     (function() {{
@@ -400,14 +404,16 @@ with tab1:
             legend: {{
                 data: ['소스 시스템', 'DSS 테이블', '시스템 모듈'],
                 top: 8,
-                textStyle: {{ color: '#aaa', fontSize: 12 }},
-                itemWidth: 20,
-                itemHeight: 14,
+                right: 20,
+                textStyle: {{ color: '#aaa', fontSize: 11 }},
+                itemWidth: 16,
+                itemHeight: 12,
             }},
             graphic: [
-                {{ type: 'text', left: 50, top: 40, style: {{ text: 'SOURCE SYSTEMS', fill: '#666', fontSize: 11, fontWeight: 'bold' }} }},
-                {{ type: 'text', left: 380, top: 40, style: {{ text: 'DSS DATABASE', fill: '#666', fontSize: 11, fontWeight: 'bold' }} }},
-                {{ type: 'text', left: 710, top: 40, style: {{ text: 'MODULES', fill: '#666', fontSize: 11, fontWeight: 'bold' }} }},
+                {{ type: 'text', left: 50, top: 38, style: {{ text: 'SOURCE SYSTEMS', fill: '#8899aa', fontSize: 13, fontWeight: 'bold', letterSpacing: 2 }} }},
+                {{ type: 'text', left: 370, top: 38, style: {{ text: 'DSS DATABASE', fill: '#8899aa', fontSize: 13, fontWeight: 'bold', letterSpacing: 2 }} }},
+                {{ type: 'text', left: 710, top: 38, style: {{ text: 'MODULES', fill: '#8899aa', fontSize: 13, fontWeight: 'bold', letterSpacing: 2 }} }},
+                {{ type: 'rect', left: 0, top: 58, shape: {{ width: 950, height: 1 }}, style: {{ fill: '#333' }} }},
             ],
             series: [{{
                 type: 'graph',
@@ -434,7 +440,7 @@ with tab1:
     }})();
     </script>
     """
-    components.html(html_graph, height=740, scrolling=False)
+    components.html(html_graph, height=800, scrolling=False)
 
     st.markdown("""
     **조작 방법:** 마우스 드래그로 캔버스 이동 / 스크롤로 확대축소 / 노드·링크 hover 시 상세 정보 표시
