@@ -17,8 +17,8 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-    .main-header { font-size: 2.2rem; font-weight: 700; color: #2F5496; margin-bottom: 0.5rem; }
-    .sub-header { font-size: 1.1rem; color: #666; margin-bottom: 2rem; }
+    .main-header { font-size: 2.2rem; font-weight: 700; color: #4A90D9; margin-bottom: 0.5rem; }
+    .sub-header { font-size: 1.1rem; color: #A0A0A0; margin-bottom: 2rem; }
     .module-card { border-radius: 10px; padding: 1.5rem;
                    border-left: 4px solid; margin-bottom: 1rem;
                    border: 1px solid rgba(128,128,128,0.3);
