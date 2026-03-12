@@ -117,23 +117,46 @@ def generate_kpi_definitions(session):
         ("PROC_REWORK", "재작업률", "operation", "%", "PROD_PROCESS", 2, "재작업/수정 발생 비율"),
 
         ("CCC", "현금전환주기", "operation", "일", None, 0, "Cash Conversion Cycle"),
+        # Level 1 - CCC 분해 (DIO + DSO - DPO)
+        ("CCC_AR", "매출채권회전일(DSO)", "operation", "일", "CCC", 1, "매출채권 평균 회수 기간"),
+        ("CCC_INV", "재고자산회전일(DIO)", "operation", "일", "CCC", 1, "재고자산 평균 보유 기간"),
+        ("CCC_AP", "매입채무회전일(DPO)", "operation", "일", "CCC", 1, "매입채무 평균 지급 기간"),
+        # Level 2 - DSO Driver
+        ("CCC_AR_UNBILLED", "미청구공사", "operation", "억원", "CCC_AR", 2, "공사 완료 미청구 금액"),
+        ("CCC_AR_OVERDUE", "연체채권비율", "operation", "%", "CCC_AR", 2, "90일 초과 연체 비율"),
+        # Level 2 - DIO Driver
+        ("CCC_INV_RAW", "원자재 재고", "operation", "일", "CCC_INV", 2, "원자재 재고 회전일"),
+        ("CCC_INV_WIP", "재공품 재고", "operation", "일", "CCC_INV", 2, "재공품 재고 회전일"),
+
         ("BACKLOG", "수주잔고", "operation", "억원", None, 0, "수주잔고"),
+        # Level 1 - 수주잔고 Driver
+        ("BL_NEW_ORDER", "신규수주액", "operation", "억원", "BACKLOG", 1, "당월 신규 수주 금액"),
+        ("BL_CONVERT", "매출전환율", "operation", "%", "BACKLOG", 1, "수주잔고 → 매출 전환 비율"),
+        ("BL_CANCEL", "수주취소/변경", "operation", "억원", "BACKLOG", 1, "수주 취소 및 금액 변경"),
 
         # ── Investment KPIs ──
-        ("CAPEX", "설비투자", "investment", "억원", None, 0, "자본적 지출"),
-        ("NPV", "투자NPV", "investment", "억원", None, 0, "순현재가치"),
-        ("IRR", "투자IRR", "investment", "%", None, 0, "내부수익률"),
-        # 투자 성과 미달 원인 분석
-        ("INV_PERF", "투자성과 분석", "investment", "점", None, 0, "투자 프로젝트 성과 종합"),
+        ("INV_PERF", "투자성과 종합", "investment", "점", None, 0, "투자 프로젝트 성과 종합"),
+        # Level 1 - 투자 규모/수익성
+        ("CAPEX", "설비투자(CAPEX)", "investment", "억원", "INV_PERF", 1, "자본적 지출"),
+        ("INV_RETURN", "투자수익성", "investment", "점", "INV_PERF", 1, "NPV/IRR 기반 투자 수익성"),
+        # Level 1 - 원인 분석
         ("INV_MARKET", "시장요인", "investment", "점", "INV_PERF", 1, "시장수요 변동, 경쟁 심화, 가격 하락"),
         ("INV_EXEC", "집행요인", "investment", "점", "INV_PERF", 1, "집행률 지연, 일정 초과, 인허가 지연"),
         ("INV_COST", "원가요인", "investment", "점", "INV_PERF", 1, "원자재 상승, 인건비 초과, 설계 변경"),
+        # Level 2 - CAPEX 분해
+        ("CAPEX_GROWTH", "성장투자", "investment", "억원", "CAPEX", 2, "신규 사업/설비 확장 투자"),
+        ("CAPEX_MAINT", "유지보수투자", "investment", "억원", "CAPEX", 2, "기존 설비 유지/교체 투자"),
+        ("CAPEX_EXEC_RATE", "투자집행률", "investment", "%", "CAPEX", 2, "계획 대비 실제 집행 비율"),
+        # Level 2 - 투자수익성 분해
+        ("NPV", "투자NPV", "investment", "억원", "INV_RETURN", 2, "순현재가치"),
+        ("IRR", "투자IRR", "investment", "%", "INV_RETURN", 2, "내부수익률"),
+        ("ROIC_WACC", "ROIC-WACC Spread", "investment", "%p", "INV_RETURN", 2, "투하자본수익률 - 가중평균자본비용"),
         # Level 2 - 시장요인 분해
         ("INV_MKT_DEMAND", "수요 변동", "investment", "%", "INV_MARKET", 2, "예상 대비 실제 수요 괴리"),
         ("INV_MKT_PRICE", "판매단가 변동", "investment", "%", "INV_MARKET", 2, "예상 대비 실제 판매단가"),
         ("INV_MKT_COMPETE", "경쟁 환경", "investment", "점", "INV_MARKET", 2, "신규 경쟁자 진입/점유율 변화"),
         # Level 2 - 집행요인 분해
-        ("INV_EXEC_RATE", "투자집행률", "investment", "%", "INV_EXEC", 2, "계획 대비 실제 집행 비율"),
+        ("INV_EXEC_RATE", "집행 진척률", "investment", "%", "INV_EXEC", 2, "계획 대비 실제 집행 비율"),
         ("INV_EXEC_DELAY", "일정 지연", "investment", "개월", "INV_EXEC", 2, "계획 대비 일정 지연 기간"),
         ("INV_EXEC_PERMIT", "인허가 진척", "investment", "%", "INV_EXEC", 2, "인허가 취득 진행률"),
         # Level 2 - 원가요인 분해
@@ -142,9 +165,28 @@ def generate_kpi_definitions(session):
         ("INV_COST_DESIGN", "설계변경 비용", "investment", "억원", "INV_COST", 2, "설계 변경으로 인한 추가 비용"),
 
         # ── Risk KPIs ──
-        ("FX_RISK", "환율리스크", "risk", "점", None, 0, "환율 변동 리스크 스코어"),
-        ("ESG_SCORE", "ESG 스코어", "risk", "점", None, 0, "ESG 종합 스코어"),
-        ("SAFETY", "안전사고율", "risk", "건/백만시간", None, 0, "LTIR"),
+        ("RISK_MGMT", "리스크 관리 종합", "risk", "점", None, 0, "리스크 종합 관리 스코어"),
+        # Level 1 - 리스크 유형별
+        ("FX_RISK", "환율리스크", "risk", "점", "RISK_MGMT", 1, "환율 변동 리스크 스코어"),
+        ("ESG_SCORE", "ESG 스코어", "risk", "점", "RISK_MGMT", 1, "ESG 종합 스코어"),
+        ("SAFETY", "안전사고율", "risk", "건/백만시간", "RISK_MGMT", 1, "LTIR"),
+        ("FIN_RISK", "재무리스크", "risk", "점", "RISK_MGMT", 1, "유동성/신용 리스크"),
+        # Level 2 - 환율 리스크 Driver
+        ("FX_EXPOSURE", "환노출금액", "risk", "억원", "FX_RISK", 2, "순 외화 노출 금액"),
+        ("FX_HEDGE", "헤지비율", "risk", "%", "FX_RISK", 2, "환위험 헤지 커버 비율"),
+        ("FX_VOLATILITY", "환율변동성", "risk", "%", "FX_RISK", 2, "주요 통화 환율 변동성"),
+        # Level 2 - ESG Driver
+        ("ESG_ENV", "환경(E) 스코어", "risk", "점", "ESG_SCORE", 2, "탄소배출, 폐기물, 용수 관리"),
+        ("ESG_SOCIAL", "사회(S) 스코어", "risk", "점", "ESG_SCORE", 2, "산업안전, 인권, 지역사회"),
+        ("ESG_GOV", "지배구조(G) 스코어", "risk", "점", "ESG_SCORE", 2, "이사회, 윤리경영, 정보공개"),
+        # Level 2 - 안전 Driver
+        ("SAFETY_INCIDENT", "중대재해 건수", "risk", "건", "SAFETY", 2, "중대산업재해 발생 건수"),
+        ("SAFETY_NEARMISS", "아차사고 건수", "risk", "건", "SAFETY", 2, "Near-miss 보고 건수"),
+        ("SAFETY_TRAINING", "안전교육이수율", "risk", "%", "SAFETY", 2, "법정 안전교육 이수율"),
+        # Level 2 - 재무리스크 Driver
+        ("FIN_DEBT_RATIO", "부채비율", "risk", "%", "FIN_RISK", 2, "총부채 / 자기자본"),
+        ("FIN_LIQUIDITY", "유동비율", "risk", "%", "FIN_RISK", 2, "유동자산 / 유동부채"),
+        ("FIN_INTEREST", "이자보상배율", "risk", "배", "FIN_RISK", 2, "영업이익 / 이자비용"),
     ]
     for kpi_id, name, cat, unit, parent, level, desc in kpis:
         session.add(KPIDefinition(
@@ -159,19 +201,19 @@ def generate_kpi_values(session, rng):
     months = pd.date_range(end=today.replace(day=1), periods=DEMO_MONTHS, freq="MS")
 
     simple_kpis = {
-        # 기존 KPI
+        # ── Operation KPIs ──
         "CCC": (45, 8),
-        "FX_RISK": (0.4, 0.15),
-        "ESG_SCORE": (72, 5),
-        "SAFETY": (0.3, 0.1),
-        "IRR": (12, 3),
-        # SG&A Cost Pool (억원 단위, 전사 OPEX의 비율로 생성)
-        "OPEX_PERSONNEL": (180, 15),
-        "OPEX_OUTSOURCE": (95, 12),
-        "OPEX_MARKETING": (45, 8),
-        "OPEX_RND": (60, 10),
-        "OPEX_GENERAL": (35, 5),
-        # 생산성 Driver
+        "CCC_AR": (55, 10),
+        "CCC_INV": (30, 6),
+        "CCC_AP": (40, 8),
+        "CCC_AR_UNBILLED": (120, 30),
+        "CCC_AR_OVERDUE": (8, 3),
+        "CCC_INV_RAW": (18, 4),
+        "CCC_INV_WIP": (12, 3),
+        "BACKLOG": (5000, 800),
+        "BL_NEW_ORDER": (800, 200),
+        "BL_CONVERT": (18, 4),
+        "BL_CANCEL": (50, 25),
         "PRODUCTIVITY": (75, 8),
         "PROD_DEMAND": (72, 10),
         "PROD_UTIL": (85, 5),
@@ -183,11 +225,22 @@ def generate_kpi_values(session, rng):
         "PROC_YIELD": (94, 3),
         "PROC_CYCLE": (12, 3),
         "PROC_REWORK": (3.5, 1.2),
-        # ROIC 사업부 기여도
+        # ── Performance KPIs ──
+        "OPEX_PERSONNEL": (180, 15),
+        "OPEX_OUTSOURCE": (95, 12),
+        "OPEX_MARKETING": (45, 8),
+        "OPEX_RND": (60, 10),
+        "OPEX_GENERAL": (35, 5),
         "ROIC_NOPAT": (450, 50),
         "ROIC_IC": (3800, 200),
-        # 투자 성과 원인 분석
+        # ── Investment KPIs ──
         "INV_PERF": (70, 10),
+        "INV_RETURN": (68, 12),
+        "IRR": (12, 3),
+        "ROIC_WACC": (3.5, 1.5),
+        "CAPEX_GROWTH": (150, 30),
+        "CAPEX_MAINT": (80, 15),
+        "CAPEX_EXEC_RATE": (82, 10),
         "INV_MARKET": (65, 12),
         "INV_EXEC": (72, 10),
         "INV_COST": (68, 11),
@@ -200,6 +253,24 @@ def generate_kpi_values(session, rng):
         "INV_COST_MAT": (8, 5),
         "INV_COST_LABOR": (5, 3),
         "INV_COST_DESIGN": (15, 8),
+        # ── Risk KPIs ──
+        "RISK_MGMT": (65, 10),
+        "FX_RISK": (0.4, 0.15),
+        "FX_EXPOSURE": (450, 80),
+        "FX_HEDGE": (72, 10),
+        "FX_VOLATILITY": (8, 3),
+        "ESG_SCORE": (72, 5),
+        "ESG_ENV": (70, 6),
+        "ESG_SOCIAL": (74, 5),
+        "ESG_GOV": (72, 7),
+        "SAFETY": (0.3, 0.1),
+        "SAFETY_INCIDENT": (0.5, 0.3),
+        "SAFETY_NEARMISS": (12, 5),
+        "SAFETY_TRAINING": (92, 5),
+        "FIN_RISK": (60, 12),
+        "FIN_DEBT_RATIO": (120, 20),
+        "FIN_LIQUIDITY": (135, 15),
+        "FIN_INTEREST": (4.5, 1.2),
     }
 
     # 사업부별 특성 반영 가중치

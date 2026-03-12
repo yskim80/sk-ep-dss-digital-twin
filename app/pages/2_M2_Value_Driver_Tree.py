@@ -156,8 +156,8 @@ with tab1:
                 "DA": {"val": c_sum["ebitda"] - c_sum["ebit"], "gap": 0, "unit": "억원"},
                 "ROIC": {"val": round((c_sum["ebit"]*0.75)/(c_sum["revenue"]*1.2)*100, 1) if c_sum["revenue"] else 0, "gap": 0, "unit": "%"},
                 "FCF": {"val": c_sum["operating_cf"] - c_sum["capex"], "gap": 0, "unit": "억원"},
-                "BACKLOG": {"val": c_sum["backlog"], "gap": 0, "unit": "억원"},
-                "CAPEX": {"val": c_sum["capex"], "gap": 0, "unit": "억원"},
+                "BACKLOG": {"val": c_sum["backlog"], "gap": round((c_sum["backlog"]/p_sum["backlog"]-1)*100, 1) if p_sum["backlog"] else 0, "unit": "억원"},
+                "CAPEX": {"val": c_sum["capex"], "gap": round((c_sum["capex"]/p_sum["capex"]-1)*100, 1) if p_sum["capex"] else 0, "unit": "억원"},
             }
             # 사업부별 매출
             bu_rev_map = {"EPC_Hitech": "REV_EPC", "GreenEnergy": "REV_GREEN",
