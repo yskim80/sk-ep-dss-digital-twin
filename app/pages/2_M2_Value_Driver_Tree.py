@@ -440,48 +440,142 @@ with tab3:
         st.markdown(f"### {kpi_info['name']} ({kpi_info['id']})")
         st.markdown(f"**산식:** {kpi_info['formula']}  |  **단위:** {kpi_info['unit']}  |  **영역:** {DECISION_AREAS.get(kpi_info['category'], kpi_info['category'])}")
 
-        # 재무 기반 추세 (성과 KPI)
+        # ── 재무 기반 추세 차트 ──
         fin_kpi_map = {
-            "P-001": "ebitda", "P-004": None,  # FCF = operating_cf - capex
-            "O-023": "backlog",
+            "EBITDA": "ebitda", "ROIC": None, "FCF": None,
+            "REV": "revenue", "COGS": "cogs", "OPEX": "opex",
+            "BACKLOG": "backlog", "CAPEX": "capex",
         }
 
+        trend_data = pd.DataFrame()
         if selected_kpi in fin_kpi_map:
             col_name = fin_kpi_map[selected_kpi]
             if col_name:
                 trend_data = fin_df.groupby("period")[col_name].sum().reset_index()
                 trend_data.columns = ["period", "value"]
-            elif selected_kpi == "P-004":  # FCF
+            elif selected_kpi == "FCF":
                 trend_data = fin_df.groupby("period").agg(
                     ocf=("operating_cf", "sum"), capex=("capex", "sum")
                 ).reset_index()
                 trend_data["value"] = trend_data["ocf"] - trend_data["capex"]
                 trend_data = trend_data[["period", "value"]]
-            else:
-                trend_data = pd.DataFrame()
+            elif selected_kpi == "ROIC":
+                # ROIC = EBIT * (1-0.25) / (Revenue * 1.2) 근사
+                trend_data = fin_df.groupby("period").agg(
+                    ebit=("ebit", "sum"), revenue=("revenue", "sum")
+                ).reset_index()
+                trend_data["value"] = (trend_data["ebit"] * 0.75) / (trend_data["revenue"] * 1.2) * 100
+                trend_data = trend_data[["period", "value"]]
+        else:
+            # KPI Values에서 추세 로드
+            from db.models import SessionLocal as _SL, KPIValue as _KV
+            _sess = _SL()
+            try:
+                all_vals = _sess.query(_KV).filter(_KV.kpi_id == selected_kpi).order_by(_KV.period).all()
+                if all_vals:
+                    _records = [{"period": pd.Timestamp(v.period), "value": v.actual} for v in all_vals]
+                    trend_data = pd.DataFrame(_records).groupby("period")["value"].mean().reset_index()
+            finally:
+                _sess.close()
 
-            if not trend_data.empty:
-                fig_trend = go.Figure()
+        if not trend_data.empty:
+            # 추세 + 계획 비교 (재무 KPI의 경우 plan도 표시)
+            fig_trend = go.Figure()
+            fig_trend.add_trace(go.Scatter(
+                x=trend_data["period"], y=trend_data["value"],
+                mode="lines+markers", name="실적",
+                line=dict(color="#4A90D9", width=2), marker=dict(size=6),
+            ))
+            # plan 추세 (재무 기반)
+            if selected_kpi == "EBITDA":
+                plan_trend = fin_df.groupby("period")["plan_ebitda"].sum().reset_index()
+                plan_trend.columns = ["period", "value"]
                 fig_trend.add_trace(go.Scatter(
-                    x=trend_data["period"], y=trend_data["value"],
-                    mode="lines+markers", name=kpi_info["name"],
-                    line=dict(color="#2F5496", width=2),
-                    marker=dict(size=6),
+                    x=plan_trend["period"], y=plan_trend["value"],
+                    mode="lines", name="계획", line=dict(color="#888", width=1.5, dash="dash"),
                 ))
-                fig_trend.update_layout(
-                    height=300, margin=dict(t=20, b=20),
-                    yaxis_title=f"{kpi_info['unit']}",
-                    xaxis_title="",
-                )
-                st.plotly_chart(fig_trend, use_container_width=True)
+            elif selected_kpi == "REV":
+                plan_trend = fin_df.groupby("period")["plan_revenue"].sum().reset_index()
+                plan_trend.columns = ["period", "value"]
+                fig_trend.add_trace(go.Scatter(
+                    x=plan_trend["period"], y=plan_trend["value"],
+                    mode="lines", name="계획", line=dict(color="#888", width=1.5, dash="dash"),
+                ))
+            fig_trend.update_layout(
+                height=300, margin=dict(t=20, b=20),
+                yaxis_title=kpi_info["unit"], xaxis_title="",
+            )
+            st.plotly_chart(fig_trend, use_container_width=True)
 
-        # KPI 값이 있는 경우 사업부별 비교
-        if not kpi_vals_df.empty:
+        # ── 사업부별 실적 vs 계획 ──
+        # 재무 기반 KPI는 Financial 테이블에서 직접 계산
+        if selected_kpi in fin_kpi_map and not current.empty:
+            st.markdown("#### 사업부별 실적 vs 계획")
+            col_chart, col_table = st.columns([2, 1])
+
+            bu_compare = []
+            for bu_id, bu_info in BUSINESS_UNITS.items():
+                c_bu = current[current["bu_id"] == bu_id]
+                if c_bu.empty:
+                    continue
+                c_s = c_bu.iloc[0]
+                if selected_kpi == "EBITDA":
+                    actual_v, plan_v = c_s["ebitda"], c_s["plan_ebitda"]
+                elif selected_kpi == "REV":
+                    actual_v, plan_v = c_s["revenue"], c_s["plan_revenue"]
+                elif selected_kpi == "COGS":
+                    actual_v = c_s["cogs"]
+                    plan_v = c_s["plan_revenue"] * (c_s["cogs"] / c_s["revenue"]) if c_s["revenue"] else 0
+                elif selected_kpi == "OPEX":
+                    actual_v = c_s["opex"]
+                    plan_v = c_s["plan_revenue"] * 0.12  # 계획 판관비율 12%
+                elif selected_kpi == "CAPEX":
+                    actual_v = c_s["capex"]
+                    plan_v = c_s["plan_revenue"] * 0.06
+                elif selected_kpi == "BACKLOG":
+                    actual_v = c_s["backlog"]
+                    plan_v = c_s["plan_revenue"] * 5.0
+                elif selected_kpi == "FCF":
+                    actual_v = c_s["operating_cf"] - c_s["capex"]
+                    plan_v = c_s["plan_ebitda"] * 0.6
+                elif selected_kpi == "ROIC":
+                    actual_v = (c_s["ebit"] * 0.75) / (c_s["revenue"] * 1.2) * 100 if c_s["revenue"] else 0
+                    plan_v = (c_s["plan_ebitda"] * 0.7) / (c_s["plan_revenue"] * 1.2) * 100 if c_s["plan_revenue"] else 0
+                else:
+                    continue
+                gap_pct = ((actual_v / plan_v) - 1) * 100 if plan_v else 0
+                bu_compare.append({
+                    "bu_name": bu_info["name"], "actual": round(actual_v, 1),
+                    "plan": round(plan_v, 1), "gap_pct": round(gap_pct, 1),
+                })
+
+            if bu_compare:
+                compare_df = pd.DataFrame(bu_compare)
+                with col_chart:
+                    fig_bar = go.Figure()
+                    fig_bar.add_trace(go.Bar(
+                        x=compare_df["bu_name"], y=compare_df["plan"],
+                        name="계획", marker_color="#D6E4F0",
+                    ))
+                    fig_bar.add_trace(go.Bar(
+                        x=compare_df["bu_name"], y=compare_df["actual"],
+                        name="실적", marker_color="#4A90D9",
+                    ))
+                    fig_bar.update_layout(barmode="group", height=300,
+                                          margin=dict(t=20, b=20), yaxis_title=kpi_info["unit"])
+                    st.plotly_chart(fig_bar, use_container_width=True)
+                with col_table:
+                    display_df = compare_df.rename(columns={
+                        "bu_name": "사업부", "actual": "실적", "plan": "계획", "gap_pct": "Gap(%)"
+                    })
+                    st.dataframe(display_df, use_container_width=True, hide_index=True)
+
+        elif not kpi_vals_df.empty:
+            # KPI Values 테이블 기반
             kpi_data = kpi_vals_df[kpi_vals_df["kpi_id"] == selected_kpi]
             if not kpi_data.empty:
                 st.markdown("#### 사업부별 실적 vs 계획")
                 col_chart, col_table = st.columns([2, 1])
-
                 with col_chart:
                     fig_bar = go.Figure()
                     fig_bar.add_trace(go.Bar(
@@ -490,68 +584,150 @@ with tab3:
                     ))
                     fig_bar.add_trace(go.Bar(
                         x=kpi_data["bu_name"], y=kpi_data["actual"],
-                        name="실적", marker_color="#2F5496",
+                        name="실적", marker_color="#4A90D9",
                     ))
-                    fig_bar.update_layout(
-                        barmode="group", height=300,
-                        margin=dict(t=20, b=20),
-                        yaxis_title=kpi_info["unit"],
-                    )
+                    fig_bar.update_layout(barmode="group", height=300,
+                                          margin=dict(t=20, b=20), yaxis_title=kpi_info["unit"])
                     st.plotly_chart(fig_bar, use_container_width=True)
-
                 with col_table:
                     display_df = kpi_data[["bu_name", "actual", "plan", "gap_pct"]].rename(columns={
                         "bu_name": "사업부", "actual": "실적", "plan": "계획", "gap_pct": "Gap(%)"
                     })
                     st.dataframe(display_df, use_container_width=True, hide_index=True)
 
-        # Driver 하위 구조 표시
+        # ── Driver 하위 구조 표시 ──
         children = tree_df[tree_df["parent"] == selected_kpi]
         if not children.empty:
             st.markdown("#### Driver 분해 구조")
             for _, child in children.iterrows():
-                # 값 표시
+                # 값 결정: KPI Values 또는 재무 데이터에서
                 val_str = ""
+                avg_gap_val = 0
                 if not kpi_vals_df.empty:
                     child_data = kpi_vals_df[kpi_vals_df["kpi_id"] == child["id"]]
                     if not child_data.empty:
                         avg_actual = child_data["actual"].mean()
-                        avg_gap = child_data["gap_pct"].mean()
-                        val_str = f"  |  실적: {avg_actual:.1f} {child['unit']} (Gap: {avg_gap:+.1f}%)"
+                        avg_gap = child_data["gap_pct"].mean() * 100
+                        avg_gap_val = avg_gap
+                        val_str = f"  |  실적: {avg_actual:,.1f} {child['unit']} (Gap: {avg_gap:+.1f}%)"
 
+                # 재무 파생 KPI 보완
+                if not val_str and not current.empty:
+                    fin_child_map = {
+                        "REV": ("revenue", "plan_revenue"),
+                        "COGS": ("cogs", None),
+                        "OPEX": ("opex", None),
+                        "DA": (None, None),
+                        "ROIC_NOPAT": (None, None),
+                        "ROIC_IC": (None, None),
+                    }
+                    if child["id"] in fin_child_map:
+                        actual_col, plan_col = fin_child_map[child["id"]]
+                        if actual_col:
+                            actual_sum = current[actual_col].sum()
+                            if plan_col:
+                                plan_sum = current[plan_col].sum()
+                                gap = ((actual_sum / plan_sum) - 1) * 100 if plan_sum else 0
+                            else:
+                                plan_sum = previous[actual_col].sum() if not previous.empty else actual_sum
+                                gap = ((actual_sum / plan_sum) - 1) * 100 if plan_sum else 0
+                            avg_gap_val = gap
+                            val_str = f"  |  실적: {actual_sum:,.0f} {child['unit']} (Gap: {gap:+.1f}%)"
+                        elif child["id"] == "DA":
+                            da_val = current["ebitda"].sum() - current["ebit"].sum()
+                            val_str = f"  |  실적: {da_val:,.0f} {child['unit']}"
+                        elif child["id"] == "ROIC_NOPAT":
+                            nopat = current["ebit"].sum() * 0.75
+                            val_str = f"  |  실적: {nopat:,.0f} {child['unit']}"
+                        elif child["id"] == "ROIC_IC":
+                            ic = current["revenue"].sum() * 1.2
+                            val_str = f"  |  실적: {ic:,.0f} {child['unit']}"
+
+                # BU별 매출 KPI
+                bu_rev_map = {
+                    "REV_EPC": "EPC_Hitech", "REV_GREEN": "GreenEnergy",
+                    "REV_RECYCLE": "Recycling", "REV_SOL": "Solution",
+                }
+                if not val_str and child["id"] in bu_rev_map and not current.empty:
+                    bu_id = bu_rev_map[child["id"]]
+                    bu_data = current[current["bu_id"] == bu_id]
+                    if not bu_data.empty:
+                        rev = bu_data["revenue"].sum()
+                        plan_rev = bu_data["plan_revenue"].sum()
+                        gap = ((rev / plan_rev) - 1) * 100 if plan_rev else 0
+                        avg_gap_val = gap
+                        val_str = f"  |  실적: {rev:,.0f} {child['unit']} (Gap: {gap:+.1f}%)"
+
+                gap_icon = "🔴" if avg_gap_val < -5 else "🟡" if avg_gap_val < -2 else "🟢" if val_str else "⚪"
                 grandchildren = tree_df[tree_df["parent"] == child["id"]]
 
-                with st.expander(f"L1: {child['name']} ({child['id']}){val_str}", expanded=True):
+                with st.expander(f"{gap_icon} L1: {child['name']} ({child['id']}){val_str}", expanded=True):
                     st.markdown(f"**산식:** {child['formula']}  |  **단위:** {child['unit']}")
 
                     if not grandchildren.empty:
                         for _, gc in grandchildren.iterrows():
                             gc_val_str = ""
+                            gc_gap = 0
                             if not kpi_vals_df.empty:
                                 gc_data = kpi_vals_df[kpi_vals_df["kpi_id"] == gc["id"]]
                                 if not gc_data.empty:
-                                    gc_val_str = f" -> 실적: {gc_data['actual'].mean():.1f} (Gap: {gc_data['gap_pct'].mean():+.1f}%)"
-                            st.markdown(f"- **L2: {gc['name']}** ({gc['id']}): {gc['formula']}{gc_val_str}")
+                                    gc_avg = gc_data["actual"].mean()
+                                    gc_gap = gc_data["gap_pct"].mean() * 100
+                                    gc_val_str = f" -> 실적: {gc_avg:,.1f} (Gap: {gc_gap:+.1f}%)"
+                            # BU별 매출 보완
+                            if not gc_val_str and gc["id"] in bu_rev_map and not current.empty:
+                                bu_id = bu_rev_map[gc["id"]]
+                                bu_data = current[current["bu_id"] == bu_id]
+                                if not bu_data.empty:
+                                    rev = bu_data["revenue"].sum()
+                                    plan_rev = bu_data["plan_revenue"].sum()
+                                    gc_gap = ((rev / plan_rev) - 1) * 100 if plan_rev else 0
+                                    gc_val_str = f" -> 실적: {rev:,.0f} (Gap: {gc_gap:+.1f}%)"
 
-                    # 사업부별 상세
+                            gc_icon = "🔴" if gc_gap < -5 else "🟡" if gc_gap < -2 else "🟢" if gc_val_str else "⚪"
+                            st.markdown(f"- {gc_icon} **L2: {gc['name']}** ({gc['id']}): {gc['formula']}{gc_val_str}")
+
+                    # 사업부별 상세 차트
+                    child_vals = pd.DataFrame()
                     if not kpi_vals_df.empty:
                         child_vals = kpi_vals_df[kpi_vals_df["kpi_id"] == child["id"]]
-                        if not child_vals.empty:
-                            fig_child = go.Figure()
-                            colors = ["#C00000" if g < -5 else "#F58220" if g < -2 else "#548235" for g in child_vals["gap_pct"]]
-                            fig_child.add_trace(go.Bar(
-                                x=child_vals["bu_name"], y=child_vals["gap_pct"],
-                                marker_color=colors,
-                                text=[f"{v:+.1f}%" for v in child_vals["gap_pct"]],
-                                textposition="outside",
-                            ))
-                            fig_child.update_layout(
-                                height=250, margin=dict(t=10, b=10),
-                                yaxis_title="Gap (%)", xaxis_title="",
-                                showlegend=False,
-                            )
-                            fig_child.add_hline(y=0, line_dash="dash", line_color="gray")
-                            st.plotly_chart(fig_child, use_container_width=True)
+
+                    # 재무 기반 사업부별 차트 (KPI Values 없는 경우)
+                    if child_vals.empty and not current.empty and child["id"] in ["REV", "COGS", "OPEX"]:
+                        fin_col = {"REV": "revenue", "COGS": "cogs", "OPEX": "opex"}[child["id"]]
+                        plan_col = {"REV": "plan_revenue", "COGS": None, "OPEX": None}[child["id"]]
+                        records = []
+                        for bu_id, bu_info in BUSINESS_UNITS.items():
+                            c_bu = current[current["bu_id"] == bu_id]
+                            p_bu = previous[previous["bu_id"] == bu_id] if not previous.empty else c_bu
+                            if c_bu.empty:
+                                continue
+                            actual_v = c_bu[fin_col].sum()
+                            if plan_col:
+                                plan_v = c_bu[plan_col].sum()
+                            else:
+                                plan_v = p_bu[fin_col].sum() if not p_bu.empty else actual_v
+                            gap = ((actual_v / plan_v) - 1) * 100 if plan_v else 0
+                            records.append({"bu_name": bu_info["name"], "gap_pct": gap})
+                        if records:
+                            child_vals = pd.DataFrame(records)
+
+                    if not child_vals.empty and "gap_pct" in child_vals.columns:
+                        fig_child = go.Figure()
+                        colors = ["#C00000" if g < -5 else "#F58220" if g < -2 else "#548235" for g in child_vals["gap_pct"]]
+                        fig_child.add_trace(go.Bar(
+                            x=child_vals["bu_name"], y=child_vals["gap_pct"],
+                            marker_color=colors,
+                            text=[f"{v:+.1f}%" for v in child_vals["gap_pct"]],
+                            textposition="outside",
+                        ))
+                        fig_child.update_layout(
+                            height=250, margin=dict(t=10, b=10),
+                            yaxis_title="Gap (%)", xaxis_title="",
+                            showlegend=False,
+                        )
+                        fig_child.add_hline(y=0, line_dash="dash", line_color="gray")
+                        st.plotly_chart(fig_child, use_container_width=True)
 
 
 # ════════════════════════════════════════════════
