@@ -205,12 +205,12 @@ with tab1:
             # 노드 크기 (레벨별)
             symbol_size = [50, 38, 28][min(level, 2)]
 
-            # 라벨 (값 포함)
+            # 라벨 (값 포함) - \n은 ECharts에서 줄바꿈으로 렌더링됨
             label_text = f"{name}"
             if val_str:
-                label_text += f"\\n{val_str} {unit}"
+                label_text += f"\n{val_str} {unit}"
             if gap_val != 0:
-                label_text += f"\\n({gap_val:+.1f}%)"
+                label_text += f"\n({gap_val:+.1f}%)"
 
             node = {
                 "name": label_text,
@@ -282,7 +282,7 @@ with tab1:
             "right": "25%" if orient == "LR" else "5%",
             "orient": orient,
             "symbol": "roundRect",
-            "symbolSize": [130, 42] if is_single_area else [100, 35],
+            "symbolSize": [140, 52] if is_single_area else [110, 44],
             "edgeShape": "polyline",
             "edgeForkPosition": "63%",
             "initialTreeDepth": 4 if is_single_area else 2,
