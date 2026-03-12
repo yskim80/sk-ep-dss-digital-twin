@@ -300,13 +300,13 @@ def generate_evm_projects(session, rng):
     from dateutil.relativedelta import relativedelta
 
     projects = [
-        ("PJT-001", "Samsung 평택 반도체 Fab", "semiconductor", "Samsung Electronics",
+        ("PJT-001", "SK hynix 청주 M15X 반도체 Fab", "semiconductor", "SK hynix",
          4200, 36, "active", 0.92, 1.08),  # CPI, cost_factor
         ("PJT-002", "SK hynix 이천 M16", "semiconductor", "SK hynix",
          3800, 30, "active", 0.97, 1.02),
-        ("PJT-003", "LG Energy Solution 배터리 공장", "battery", "LG Energy Solution",
+        ("PJT-003", "SK On 배터리 공장 증설", "battery", "SK On",
          2200, 24, "active", 1.03, 0.98),
-        ("PJT-004", "삼성바이오로직스 4공장", "pharma", "Samsung Biologics",
+        ("PJT-004", "SK바이오사이언스 안동 공장", "pharma", "SK Bioscience",
          1800, 28, "delayed", 0.88, 1.15),
         ("PJT-005", "SK E&S LNG 터미널", "energy", "SK E&S",
          2800, 32, "active", 0.95, 1.05),
