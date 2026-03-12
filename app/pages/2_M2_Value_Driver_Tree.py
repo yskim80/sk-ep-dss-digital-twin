@@ -128,6 +128,7 @@ with tab1:
             tree_df = tree_df[tree_df["id"].isin(all_ids) | tree_df["category"].eq(area_filter)]
 
         # KPI별 Gap 데이터 집계 (전사 평균)
+        # load_kpi_values에서 이미 gap_pct * 100 처리됨 → 그대로 사용
         gap_map = {}
         if not kpi_vals_df.empty:
             for kpi_id, grp in kpi_vals_df.groupby("kpi_id"):
@@ -137,7 +138,8 @@ with tab1:
                     "plan_avg": round(grp["plan"].mean(), 2),
                 }
 
-        # 재무 데이터에서 파생 KPI 값 계산
+        # 재무 데이터에서 파생 KPI 값 계산 (현재 KPI ID 기준)
+        fin_derived = {}
         if not current.empty:
             c = current
             p = previous if not previous.empty else current
@@ -146,31 +148,30 @@ with tab1:
             p_sum = p[["revenue", "cogs", "gross_profit", "opex", "ebitda", "ebit",
                         "capex", "operating_cf", "backlog", "plan_revenue", "plan_ebitda"]].sum()
 
-            # 재무 파생 KPI
             fin_derived = {
-                "P-001": {"val": c_sum["ebitda"], "gap": (c_sum["ebitda"]/c_sum["plan_ebitda"]-1)*100 if c_sum["plan_ebitda"] else 0, "unit": "억원"},
-                "P-011": {"val": c_sum["revenue"], "gap": (c_sum["revenue"]/c_sum["plan_revenue"]-1)*100 if c_sum["plan_revenue"] else 0, "unit": "억원"},
-                "P-012": {"val": c_sum["cogs"], "gap": ((c_sum["cogs"]/c_sum["revenue"])-(p_sum["cogs"]/p_sum["revenue"]))*100 if p_sum["revenue"] else 0, "unit": "억원"},
-                "P-013": {"val": round((c_sum["gross_profit"]/c_sum["revenue"])*100, 1) if c_sum["revenue"] else 0, "gap": 0, "unit": "%"},
-                "P-014": {"val": round((c_sum["opex"]/c_sum["revenue"])*100, 1) if c_sum["revenue"] else 0, "gap": 0, "unit": "%"},
-                "P-004": {"val": c_sum["operating_cf"] - c_sum["capex"], "gap": 0, "unit": "억원"},
-                "O-023": {"val": c_sum["backlog"], "gap": 0, "unit": "억원"},
+                "EBITDA": {"val": c_sum["ebitda"], "gap": (c_sum["ebitda"]/c_sum["plan_ebitda"]-1)*100 if c_sum["plan_ebitda"] else 0, "unit": "억원"},
+                "REV": {"val": c_sum["revenue"], "gap": (c_sum["revenue"]/c_sum["plan_revenue"]-1)*100 if c_sum["plan_revenue"] else 0, "unit": "억원"},
+                "COGS": {"val": c_sum["cogs"], "gap": ((c_sum["cogs"]/c_sum["revenue"])-(p_sum["cogs"]/p_sum["revenue"]))*100 if p_sum["revenue"] else 0, "unit": "억원"},
+                "OPEX": {"val": c_sum["opex"], "gap": ((c_sum["opex"]/c_sum["revenue"])-(p_sum["opex"]/p_sum["revenue"]))*100 if p_sum["revenue"] else 0, "unit": "억원"},
+                "DA": {"val": c_sum["ebitda"] - c_sum["ebit"], "gap": 0, "unit": "억원"},
+                "ROIC": {"val": round((c_sum["ebit"]*0.75)/(c_sum["revenue"]*1.2)*100, 1) if c_sum["revenue"] else 0, "gap": 0, "unit": "%"},
+                "FCF": {"val": c_sum["operating_cf"] - c_sum["capex"], "gap": 0, "unit": "억원"},
+                "BACKLOG": {"val": c_sum["backlog"], "gap": 0, "unit": "억원"},
+                "CAPEX": {"val": c_sum["capex"], "gap": 0, "unit": "억원"},
             }
             # 사업부별 매출
-            for bu_id, bu_info in BUSINESS_UNITS.items():
+            bu_rev_map = {"EPC_Hitech": "REV_EPC", "GreenEnergy": "REV_GREEN",
+                          "Recycling": "REV_RECYCLE", "Solution": "REV_SOL"}
+            for bu_id, kpi_id in bu_rev_map.items():
                 bu_data = current[current["bu_id"] == bu_id]
                 if not bu_data.empty:
-                    bu_map = {"EPC_Hitech": "P-021", "GreenEnergy": "P-022", "Recycling": "P-023", "Solution": "P-024"}
-                    if bu_id in bu_map:
-                        rev = bu_data["revenue"].sum()
-                        plan_rev = bu_data["plan_revenue"].sum()
-                        fin_derived[bu_map[bu_id]] = {
-                            "val": rev,
-                            "gap": round((rev/plan_rev - 1)*100, 1) if plan_rev else 0,
-                            "unit": "억원",
-                        }
-        else:
-            fin_derived = {}
+                    rev = bu_data["revenue"].sum()
+                    plan_rev = bu_data["plan_revenue"].sum()
+                    fin_derived[kpi_id] = {
+                        "val": rev,
+                        "gap": round((rev/plan_rev - 1)*100, 1) if plan_rev else 0,
+                        "unit": "억원",
+                    }
 
         def make_node(row):
             kpi_id = row["id"]
@@ -258,8 +259,14 @@ with tab1:
 
     # Determine layout
     is_single_area = selected_area is not None
-    orient = "TB" if is_single_area else "LR"
-    chart_height = 700 if is_single_area else 900
+    orient = "LR"
+    if is_single_area:
+        # 노드 수에 따라 높이 동적 조정
+        node_count = sum(1 for _ in pd.DataFrame(kpi_tree).iterrows()
+                         if pd.DataFrame(kpi_tree).iloc[_[0]]["category"] == selected_area) if selected_area else 0
+        chart_height = max(700, node_count * 55)
+    else:
+        chart_height = 1000
 
     echarts_option = {
         "tooltip": {
@@ -276,10 +283,10 @@ with tab1:
             "right": "25%" if orient == "LR" else "5%",
             "orient": orient,
             "symbol": "roundRect",
-            "symbolSize": [120, 40] if is_single_area else [100, 35],
+            "symbolSize": [130, 42] if is_single_area else [100, 35],
             "edgeShape": "polyline",
             "edgeForkPosition": "63%",
-            "initialTreeDepth": 3 if is_single_area else 2,
+            "initialTreeDepth": 4 if is_single_area else 2,
             "label": {
                 "position": "inside" if is_single_area else "inside",
                 "verticalAlign": "middle",
