@@ -203,21 +203,51 @@ with tab1:
                 item_color = "#548235"  # green - 정상
 
             # 노드 크기 (레벨별)
-            symbol_size = [50, 38, 28][min(level, 2)]
+            symbol_size = [18, 14, 10][min(level, 2)]
 
-            # 라벨 (값 포함) - \n은 ECharts에서 줄바꿈으로 렌더링됨
-            label_text = f"{name}"
+            # ECharts rich text 라벨 구성
+            # Gap 색상 (양수=파랑, 음수=빨강)
+            gap_color = "#E53935" if gap_val < 0 else "#1E88E5" if gap_val > 0 else "#999"
+
+            label_text = f"{{title|{name}}}"
             if val_str:
-                label_text += f"\n{val_str} {unit}"
+                label_text += f"\n{{val|{val_str} {unit}}}"
             if gap_val != 0:
-                label_text += f"\n({gap_val:+.1f}%)"
+                label_text += f"\n{{gap|({gap_val:+.1f}%)}}"
 
             node = {
                 "name": label_text,
                 "value": gap_val,
                 "itemStyle": {"color": item_color, "borderColor": item_color, "borderWidth": 2},
                 "symbolSize": symbol_size,
-                "label": {"fontSize": 10 if level > 0 else 12},
+                "label": {
+                    "position": "right" if level > 0 else "right",
+                    "distance": 8,
+                    "fontSize": 10,
+                    "color": "#E0E0E0",
+                    "backgroundColor": "rgba(30,33,40,0.85)",
+                    "borderRadius": 4,
+                    "padding": [6, 10],
+                    "rich": {
+                        "title": {
+                            "fontSize": 11 if level == 0 else 10,
+                            "fontWeight": "bold" if level == 0 else "normal",
+                            "color": "#FFFFFF",
+                            "lineHeight": 16,
+                        },
+                        "val": {
+                            "fontSize": 10,
+                            "color": "#B0BEC5",
+                            "lineHeight": 15,
+                        },
+                        "gap": {
+                            "fontSize": 10,
+                            "fontWeight": "bold",
+                            "color": gap_color,
+                            "lineHeight": 15,
+                        },
+                    },
+                },
                 "children": [],
             }
 
@@ -245,10 +275,23 @@ with tab1:
                 if cat_roots.empty:
                     continue
                 cat_node = {
-                    "name": cat_name,
+                    "name": f"{{title|{cat_name}}}",
                     "itemStyle": {"color": cat_colors[cat_key], "borderColor": cat_colors[cat_key]},
-                    "symbolSize": 55,
-                    "label": {"fontSize": 13, "fontWeight": "bold"},
+                    "symbolSize": 22,
+                    "label": {
+                        "position": "right",
+                        "distance": 8,
+                        "backgroundColor": cat_colors[cat_key],
+                        "borderRadius": 4,
+                        "padding": [8, 14],
+                        "rich": {
+                            "title": {
+                                "fontSize": 13,
+                                "fontWeight": "bold",
+                                "color": "#FFFFFF",
+                            },
+                        },
+                    },
                     "children": [make_node(row) for _, row in cat_roots.iterrows()],
                 }
                 tree_data.append(cat_node)
@@ -263,9 +306,9 @@ with tab1:
     if is_single_area:
         tree_tmp = pd.DataFrame(kpi_tree)
         node_count = len(tree_tmp[tree_tmp["category"] == selected_area])
-        chart_height = max(700, node_count * 55)
+        chart_height = max(800, node_count * 65)
     else:
-        chart_height = 1000
+        chart_height = 1200
 
     echarts_option = {
         "tooltip": {
@@ -276,29 +319,28 @@ with tab1:
         "series": [{
             "type": "tree",
             "data": tree_data,
-            "top": "5%",
-            "left": "10%" if orient == "LR" else "5%",
-            "bottom": "5%",
-            "right": "25%" if orient == "LR" else "5%",
+            "top": "3%",
+            "left": "8%",
+            "bottom": "3%",
+            "right": "35%",
             "orient": orient,
-            "symbol": "roundRect",
-            "symbolSize": [140, 52] if is_single_area else [110, 44],
+            "symbol": "circle",
+            "symbolSize": 14,
             "edgeShape": "polyline",
             "edgeForkPosition": "63%",
             "initialTreeDepth": 4 if is_single_area else 2,
             "label": {
-                "position": "inside" if is_single_area else "inside",
+                "position": "right",
+                "distance": 8,
                 "verticalAlign": "middle",
-                "align": "center",
                 "fontSize": 10,
-                "color": "#fff",
-                "rich": {},
+                "color": "#E0E0E0",
             },
             "leaves": {
                 "label": {
-                    "position": "inside",
+                    "position": "right",
+                    "distance": 8,
                     "verticalAlign": "middle",
-                    "align": "center",
                 },
             },
             "emphasis": {
@@ -317,10 +359,10 @@ with tab1:
     # Render ECharts via HTML component
     echarts_json = json.dumps(echarts_option, ensure_ascii=False)
     html_content = f"""
-    <div id="driver-tree" style="width:100%;height:{chart_height}px;"></div>
+    <div id="driver-tree" style="width:100%;height:{chart_height}px;background:#0E1117;"></div>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
     <script>
-        var chart = echarts.init(document.getElementById('driver-tree'));
+        var chart = echarts.init(document.getElementById('driver-tree'), 'dark');
         var option = {echarts_json};
         chart.setOption(option);
         window.addEventListener('resize', function() {{ chart.resize(); }});
