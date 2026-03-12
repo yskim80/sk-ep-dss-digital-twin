@@ -1,0 +1,45 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Verify DB init & seed data
+        run: python -c "from data.seed_data import seed_all; seed_all(); print('DB seed OK')"
+
+      - name: Verify Streamlit entry point
+        run: python -c "import ast; ast.parse(open('app/Home.py').read()); print('Syntax OK')"
+
+  docker:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t sk-ep-dss:latest .
+
+      - name: Test container starts
+        run: |
+          docker run -d --name test-dss -p 8501:8501 sk-ep-dss:latest
+          sleep 10
+          curl --fail http://localhost:8501/_stcore/health || exit 1
+          docker stop test-dss

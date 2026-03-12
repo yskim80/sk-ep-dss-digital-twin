@@ -1,0 +1,16 @@
+version: "3.9"
+
+services:
+  dss-app:
+    build: .
+    container_name: sk-ep-dss
+    ports:
+      - "8501:8501"
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    volumes:
+      - db-data:/app/db
+    restart: unless-stopped
+
+volumes:
+  db-data:
