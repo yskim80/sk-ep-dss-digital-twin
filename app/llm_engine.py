@@ -41,9 +41,19 @@ def _get_api_key():
                 return line.split("=", 1)[1].strip().strip('"').strip("'")
     return None
 
-_api_key = _get_api_key()
-client = Anthropic(api_key=_api_key) if _api_key else None
 MODEL = "claude-sonnet-4-20250514"
+
+
+def _get_client() -> Optional[Anthropic]:
+    """매 호출 시 최신 API 키로 클라이언트 생성"""
+    key = _get_api_key()
+    if key:
+        return Anthropic(api_key=key)
+    return None
+
+
+# 하위 호환: 기존 코드에서 `from llm_engine import client` 사용
+client = _get_client()
 
 SYSTEM_PROMPT = """당신은 SK에코플랜트 경영진을 위한 Decision Intelligence 분석가입니다.
 아래 데이터를 기반으로 경영진의 비즈니스 질문에 전문적으로 답변합니다.
@@ -335,20 +345,21 @@ def ask_question(user_question: str, stream: bool = False):
         f"위 데이터를 기반으로 정확하고 구조적인 답변을 제공하세요."
     )
 
-    if client is None:
+    active_client = _get_client()
+    if active_client is None:
         raise RuntimeError(
             "ANTHROPIC_API_KEY 미설정. 환경변수, .env 파일, 또는 Streamlit secrets에 설정하세요."
         )
 
     if stream:
-        return client.messages.stream(
+        return active_client.messages.stream(
             model=MODEL,
             max_tokens=2000,
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": user_message}],
         )
     else:
-        response = client.messages.create(
+        response = active_client.messages.create(
             model=MODEL,
             max_tokens=2000,
             system=SYSTEM_PROMPT,

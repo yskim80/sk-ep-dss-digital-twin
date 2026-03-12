@@ -35,21 +35,14 @@ with st.sidebar:
     if api_key_input:
         import os
         os.environ["ANTHROPIC_API_KEY"] = api_key_input
-        # Reload client
-        import importlib
-        if "llm_engine" in sys.modules:
-            del sys.modules["llm_engine"]
         st.session_state.pop("llm_available", None)
 
     if st.button("연결 테스트", key="test_api"):
         try:
-            import os
-            if "llm_engine" in sys.modules:
-                del sys.modules["llm_engine"]
-            from llm_engine import client
-            if client:
-                # Quick test
-                resp = client.messages.create(
+            from llm_engine import _get_client
+            test_client = _get_client()
+            if test_client:
+                resp = test_client.messages.create(
                     model="claude-sonnet-4-20250514",
                     max_tokens=10,
                     messages=[{"role": "user", "content": "hi"}]
@@ -65,8 +58,8 @@ with st.sidebar:
 
 if "llm_available" not in st.session_state:
     try:
-        from llm_engine import client
-        st.session_state.llm_available = (client is not None)
+        from llm_engine import _get_client
+        st.session_state.llm_available = (_get_client() is not None)
         if not st.session_state.llm_available:
             st.session_state.llm_error = "ANTHROPIC_API_KEY 미설정 (왼쪽 사이드바에서 입력하세요)"
     except Exception as e:
