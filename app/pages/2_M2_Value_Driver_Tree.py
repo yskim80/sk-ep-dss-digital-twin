@@ -47,10 +47,7 @@ def load_kpi_values(period_str):
         from datetime import date
         period = date.fromisoformat(period_str)
         vals = session.query(KPIValue).filter(KPIValue.period == period).all()
-        kpi_alias_map = {
-            "UTIL": "O-011", "CCC": "O-021", "FX_RISK": "R-002",
-            "ESG_SCORE": "R-004", "SAFETY": "R-006", "IRR": "I-003",
-        }
+        kpi_alias_map = {}
         records = []
         for v in vals:
             records.append({
@@ -96,7 +93,10 @@ if selected_bu != "전사":
 # ════════════════════════════════════════════════
 # TAB 구조
 # ════════════════════════════════════════════════
-tab1, tab2, tab3 = st.tabs(["Driver Tree (Interactive)", "EBITDA Waterfall", "KPI Drill-down"])
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    "Driver Tree (Interactive)", "EBITDA Waterfall", "KPI Drill-down",
+    "SG&A Cost Pool 분석", "생산성 Driver 분석", "투자성과·ROIC 분석"
+])
 
 
 # ════════════════════════════════════════════════
@@ -119,7 +119,13 @@ with tab1:
         """KPI 정의를 ECharts tree 노드 구조로 변환"""
         tree_df = pd.DataFrame(kpi_tree)
         if area_filter:
-            tree_df = tree_df[tree_df["category"] == area_filter]
+            # 영역 필터 시 해당 영역 + 자식 KPI 모두 포함
+            area_kpis = tree_df[tree_df["category"] == area_filter]["id"].tolist()
+            all_ids = set(area_kpis)
+            for _ in range(3):  # 최대 3레벨 깊이
+                children_ids = tree_df[tree_df["parent"].isin(all_ids)]["id"].tolist()
+                all_ids.update(children_ids)
+            tree_df = tree_df[tree_df["id"].isin(all_ids) | tree_df["category"].eq(area_filter)]
 
         # KPI별 Gap 데이터 집계 (전사 평균)
         gap_map = {}
@@ -546,3 +552,345 @@ with tab3:
                             )
                             fig_child.add_hline(y=0, line_dash="dash", line_color="gray")
                             st.plotly_chart(fig_child, use_container_width=True)
+
+
+# ════════════════════════════════════════════════
+# TAB 4: SG&A Cost Pool 분석
+# ════════════════════════════════════════════════
+with tab4:
+    st.subheader("SG&A(판관비) Cost Pool 분해")
+    st.caption("판관비 증가의 주요 Cost Pool과 사업부별 기여도를 분석합니다")
+
+    kpi_vals_df4 = load_kpi_values(str(pd.Timestamp(analysis_month).date()))
+    sga_ids = ["OPEX_PERSONNEL", "OPEX_OUTSOURCE", "OPEX_MARKETING", "OPEX_RND", "OPEX_GENERAL"]
+    sga_names = {"OPEX_PERSONNEL": "인건비", "OPEX_OUTSOURCE": "외주용역비",
+                 "OPEX_MARKETING": "영업마케팅비", "OPEX_RND": "연구개발비", "OPEX_GENERAL": "일반관리비"}
+    sga_colors = ["#2F5496", "#548235", "#BF8F00", "#7030A0", "#C00000"]
+
+    if not kpi_vals_df4.empty:
+        sga_data = kpi_vals_df4[kpi_vals_df4["kpi_id"].isin(sga_ids)]
+
+        if not sga_data.empty:
+            col_pie, col_bar = st.columns(2)
+
+            # 전사 Cost Pool 구성비 (Pie)
+            with col_pie:
+                st.markdown("#### Cost Pool 구성비")
+                pool_totals = sga_data.groupby("kpi_id")["actual"].sum().reset_index()
+                pool_totals["name"] = pool_totals["kpi_id"].map(sga_names)
+                fig_pie = go.Figure(go.Pie(
+                    labels=pool_totals["name"], values=pool_totals["actual"],
+                    marker=dict(colors=sga_colors),
+                    textinfo="label+percent", textposition="outside",
+                    hole=0.4,
+                ))
+                fig_pie.update_layout(height=380, margin=dict(t=20, b=20), showlegend=False)
+                st.plotly_chart(fig_pie, use_container_width=True)
+
+            # Cost Pool별 계획 대비 Gap (Bar)
+            with col_bar:
+                st.markdown("#### Cost Pool별 계획 대비 Gap")
+                pool_gap = sga_data.groupby("kpi_id").agg(
+                    actual=("actual", "sum"), plan=("plan", "sum")
+                ).reset_index()
+                pool_gap["gap_pct"] = ((pool_gap["actual"] / pool_gap["plan"]) - 1) * 100
+                pool_gap["name"] = pool_gap["kpi_id"].map(sga_names)
+                pool_gap = pool_gap.sort_values("gap_pct", ascending=True)
+                colors_gap = ["#C00000" if v > 5 else "#F58220" if v > 2 else "#548235" for v in pool_gap["gap_pct"]]
+
+                fig_gap = go.Figure(go.Bar(
+                    x=pool_gap["gap_pct"], y=pool_gap["name"],
+                    orientation="h", marker_color=colors_gap,
+                    text=[f"{v:+.1f}%" for v in pool_gap["gap_pct"]],
+                    textposition="outside",
+                ))
+                fig_gap.update_layout(height=380, margin=dict(t=20, b=20, l=100),
+                                      xaxis_title="계획 대비 Gap (%)")
+                fig_gap.add_vline(x=0, line_dash="dash", line_color="gray")
+                st.plotly_chart(fig_gap, use_container_width=True)
+
+            # 사업부 × Cost Pool 히트맵
+            st.markdown("#### 사업부별 SG&A Cost Pool 상세")
+            pivot = sga_data.pivot_table(index="bu_name", columns="kpi_id",
+                                         values="actual", aggfunc="sum").fillna(0)
+            pivot.columns = [sga_names.get(c, c) for c in pivot.columns]
+            pivot["합계"] = pivot.sum(axis=1)
+            pivot = pivot.sort_values("합계", ascending=False)
+
+            # 히트맵
+            heat_vals = pivot.drop(columns=["합계"])
+            fig_heat = go.Figure(go.Heatmap(
+                z=heat_vals.values, x=heat_vals.columns.tolist(),
+                y=heat_vals.index.tolist(),
+                colorscale="YlOrRd", texttemplate="%{z:.0f}",
+                hovertemplate="사업부: %{y}<br>항목: %{x}<br>금액: %{z:.0f}억원",
+            ))
+            fig_heat.update_layout(height=300, margin=dict(t=10, b=10))
+            st.plotly_chart(fig_heat, use_container_width=True)
+
+            # 조직별 증가율 테이블
+            st.markdown("#### SG&A 증가 기여도 분석")
+            contrib_data = []
+            for bu in sga_data["bu_name"].unique():
+                bu_sga = sga_data[sga_data["bu_name"] == bu]
+                total_actual = bu_sga["actual"].sum()
+                total_plan = bu_sga["plan"].sum()
+                gap_abs = total_actual - total_plan
+                gap_pct = ((total_actual / total_plan) - 1) * 100 if total_plan else 0
+                top_driver = bu_sga.loc[bu_sga["actual"].idxmax()]
+                contrib_data.append({
+                    "사업부": bu,
+                    "실적 (억원)": f"{total_actual:,.0f}",
+                    "계획 (억원)": f"{total_plan:,.0f}",
+                    "Gap (억원)": f"{gap_abs:+,.0f}",
+                    "Gap (%)": f"{gap_pct:+.1f}%",
+                    "최대 비중 항목": sga_names.get(top_driver["kpi_id"], top_driver["kpi_id"]),
+                })
+            st.dataframe(pd.DataFrame(contrib_data), use_container_width=True, hide_index=True)
+    else:
+        st.info("SG&A Cost Pool 데이터가 없습니다.")
+
+
+# ════════════════════════════════════════════════
+# TAB 5: 생산성 Driver 분석
+# ════════════════════════════════════════════════
+with tab5:
+    st.subheader("생산성 저하 Driver 분석")
+    st.caption("생산성 저하의 근본 원인을 수요/가동률/프로세스 3축으로 분해합니다")
+
+    kpi_vals_df5 = load_kpi_values(str(pd.Timestamp(analysis_month).date()))
+
+    prod_drivers = {
+        "PROD_DEMAND": {"name": "수요/수주", "icon": "📦", "color": "#2F5496",
+                        "children": ["DEMAND_ORDER_RATE", "DEMAND_PIPELINE"]},
+        "PROD_UTIL": {"name": "설비가동률", "icon": "⚙️", "color": "#548235",
+                      "children": ["UTIL_PLANNED", "UTIL_DOWNTIME"]},
+        "PROD_PROCESS": {"name": "프로세스 효율", "icon": "🔧", "color": "#BF8F00",
+                         "children": ["PROC_YIELD", "PROC_CYCLE", "PROC_REWORK"]},
+    }
+    child_names = {
+        "DEMAND_ORDER_RATE": "수주전환율", "DEMAND_PIPELINE": "파이프라인",
+        "UTIL_PLANNED": "계획가동시간", "UTIL_DOWNTIME": "비계획정지",
+        "PROC_YIELD": "공정수율", "PROC_CYCLE": "Cycle Time", "PROC_REWORK": "재작업률",
+    }
+
+    if not kpi_vals_df5.empty:
+        # 생산성 종합 스코어
+        prod_total = kpi_vals_df5[kpi_vals_df5["kpi_id"] == "PRODUCTIVITY"]
+        if not prod_total.empty:
+            col_m1, col_m2, col_m3 = st.columns(3)
+            avg_actual = prod_total["actual"].mean()
+            avg_plan = prod_total["plan"].mean()
+            avg_gap = ((avg_actual / avg_plan) - 1) * 100 if avg_plan else 0
+            col_m1.metric("종합 생산성", f"{avg_actual:.1f}점", f"{avg_gap:+.1f}%")
+
+            for i, (drv_id, drv_info) in enumerate(prod_drivers.items()):
+                drv_data = kpi_vals_df5[kpi_vals_df5["kpi_id"] == drv_id]
+                if not drv_data.empty:
+                    d_actual = drv_data["actual"].mean()
+                    d_plan = drv_data["plan"].mean()
+                    d_gap = ((d_actual / d_plan) - 1) * 100 if d_plan else 0
+                    [col_m2, col_m3][i % 2].metric(
+                        f"{drv_info['icon']} {drv_info['name']}", f"{d_actual:.1f}%", f"{d_gap:+.1f}%"
+                    )
+
+        # 3축 Driver 상세
+        st.divider()
+        drv_cols = st.columns(3)
+        for col, (drv_id, drv_info) in zip(drv_cols, prod_drivers.items()):
+            with col:
+                st.markdown(f"#### {drv_info['icon']} {drv_info['name']}")
+
+                # 사업부별 Bar
+                drv_data = kpi_vals_df5[kpi_vals_df5["kpi_id"] == drv_id]
+                if not drv_data.empty:
+                    drv_data = drv_data.sort_values("gap_pct")
+                    colors_drv = ["#C00000" if g < -5 else "#F58220" if g < -2 else "#548235"
+                                  for g in drv_data["gap_pct"]]
+                    fig_drv = go.Figure(go.Bar(
+                        x=drv_data["bu_name"], y=drv_data["actual"],
+                        marker_color=colors_drv,
+                        text=[f"{v:.1f}" for v in drv_data["actual"]],
+                        textposition="outside",
+                    ))
+                    fig_drv.update_layout(height=250, margin=dict(t=10, b=10),
+                                          yaxis_title="%", showlegend=False)
+                    st.plotly_chart(fig_drv, use_container_width=True)
+
+                # 하위 Driver
+                for child_id in drv_info["children"]:
+                    child_data = kpi_vals_df5[kpi_vals_df5["kpi_id"] == child_id]
+                    if not child_data.empty:
+                        avg_val = child_data["actual"].mean()
+                        avg_gap = child_data["gap_pct"].mean()
+                        gap_icon = "🔴" if avg_gap < -5 else "🟡" if avg_gap < -2 else "🟢"
+                        st.markdown(f"{gap_icon} **{child_names.get(child_id, child_id)}**: "
+                                    f"{avg_val:.1f} ({avg_gap:+.1f}%)")
+
+        # 사업부별 생산성 레이더 차트
+        st.divider()
+        st.markdown("#### 사업부별 생산성 프로파일")
+        radar_data = []
+        categories = list(prod_drivers.keys())
+        cat_names = [d["name"] for d in prod_drivers.values()]
+
+        for bu_id, bu_info in BUSINESS_UNITS.items():
+            vals = []
+            for cat_id in categories:
+                cat_data = kpi_vals_df5[
+                    (kpi_vals_df5["kpi_id"] == cat_id) & (kpi_vals_df5["bu_name"] == bu_info["name"])
+                ]
+                vals.append(cat_data["actual"].mean() if not cat_data.empty else 0)
+            radar_data.append({"bu": bu_info["name"], "vals": vals, "color": bu_info["color"]})
+
+        fig_radar = go.Figure()
+        for rd in radar_data:
+            fig_radar.add_trace(go.Scatterpolar(
+                r=rd["vals"] + [rd["vals"][0]],
+                theta=cat_names + [cat_names[0]],
+                name=rd["bu"], line=dict(color=rd["color"], width=2),
+                fill="toself", opacity=0.15,
+            ))
+        fig_radar.update_layout(
+            polar=dict(radialaxis=dict(visible=True, range=[50, 100])),
+            height=400, margin=dict(t=30, b=30),
+        )
+        st.plotly_chart(fig_radar, use_container_width=True)
+    else:
+        st.info("생산성 데이터가 없습니다.")
+
+
+# ════════════════════════════════════════════════
+# TAB 6: 투자성과·ROIC 분석
+# ════════════════════════════════════════════════
+with tab6:
+    st.subheader("투자 성과 미달 원인 & ROIC 기여도 분석")
+
+    kpi_vals_df6 = load_kpi_values(str(pd.Timestamp(analysis_month).date()))
+
+    if not kpi_vals_df6.empty:
+        # ── ROIC 사업부별 기여도 ──
+        st.markdown("### 포트폴리오 ROIC 기여도")
+        st.caption("어느 사업이 ROIC 하락을 주도하는가?")
+
+        roic_ids = ["ROIC_EPC", "ROIC_GREEN", "ROIC_RECYCLE", "ROIC_SOL"]
+        roic_names = {"ROIC_EPC": "Hi-tech EPC", "ROIC_GREEN": "Green Energy",
+                      "ROIC_RECYCLE": "Recycling", "ROIC_SOL": "Solution"}
+        roic_data = kpi_vals_df6[kpi_vals_df6["kpi_id"].isin(roic_ids)]
+
+        if not roic_data.empty:
+            col_roic1, col_roic2 = st.columns(2)
+
+            with col_roic1:
+                # 기여도 Waterfall
+                roic_summary = roic_data.groupby("kpi_id").agg(
+                    actual=("actual", "mean"), plan=("plan", "mean")
+                ).reset_index()
+                roic_summary["name"] = roic_summary["kpi_id"].map(roic_names)
+                roic_summary["gap"] = roic_summary["actual"] - roic_summary["plan"]
+                roic_summary = roic_summary.sort_values("gap")
+
+                total_gap = roic_summary["gap"].sum()
+                fig_roic_w = go.Figure(go.Waterfall(
+                    name="", orientation="v",
+                    measure=["relative"] * len(roic_summary) + ["total"],
+                    x=roic_summary["name"].tolist() + ["전사 ROIC Gap"],
+                    y=roic_summary["gap"].tolist() + [total_gap],
+                    text=[f"{v:+.2f}%p" for v in roic_summary["gap"]] + [f"{total_gap:+.2f}%p"],
+                    textposition="outside",
+                    increasing={"marker": {"color": "#2F5496"}},
+                    decreasing={"marker": {"color": "#C00000"}},
+                    totals={"marker": {"color": "#7030A0"}},
+                    connector={"line": {"color": "rgb(63,63,63)"}},
+                ))
+                fig_roic_w.update_layout(height=380, margin=dict(t=30, b=30),
+                                          yaxis_title="ROIC Gap (%p)",
+                                          title="사업부별 ROIC Gap 기여 (Waterfall)")
+                st.plotly_chart(fig_roic_w, use_container_width=True)
+
+            with col_roic2:
+                # 실적 vs 계획 비교
+                fig_roic_bar = go.Figure()
+                fig_roic_bar.add_trace(go.Bar(
+                    x=roic_summary["name"], y=roic_summary["plan"],
+                    name="계획 ROIC", marker_color="#D6E4F0",
+                ))
+                fig_roic_bar.add_trace(go.Bar(
+                    x=roic_summary["name"], y=roic_summary["actual"],
+                    name="실적 ROIC", marker_color="#2F5496",
+                ))
+                fig_roic_bar.update_layout(height=380, margin=dict(t=30, b=30),
+                                            barmode="group", yaxis_title="ROIC (%)",
+                                            title="사업부별 ROIC 실적 vs 계획")
+                st.plotly_chart(fig_roic_bar, use_container_width=True)
+
+        # ── 투자 성과 미달 원인 분석 ──
+        st.divider()
+        st.markdown("### 투자 성과 미달 원인 분석")
+        st.caption("시장/집행/원가 3축으로 투자 프로젝트 부진 원인을 진단합니다")
+
+        inv_cause_ids = ["INV_MARKET", "INV_EXEC", "INV_COST"]
+        inv_cause_names = {"INV_MARKET": "시장요인", "INV_EXEC": "집행요인", "INV_COST": "원가요인"}
+        inv_cause_colors = {"INV_MARKET": "#2F5496", "INV_EXEC": "#548235", "INV_COST": "#C00000"}
+        inv_cause_icons = {"INV_MARKET": "📉", "INV_EXEC": "🏗️", "INV_COST": "💸"}
+
+        inv_data = kpi_vals_df6[kpi_vals_df6["kpi_id"].isin(inv_cause_ids)]
+
+        if not inv_data.empty:
+            # 3축 요약 Metric
+            cause_cols = st.columns(3)
+            for col, cause_id in zip(cause_cols, inv_cause_ids):
+                with col:
+                    cause_data = inv_data[inv_data["kpi_id"] == cause_id]
+                    avg_actual = cause_data["actual"].mean()
+                    avg_plan = cause_data["plan"].mean()
+                    avg_gap = ((avg_actual / avg_plan) - 1) * 100 if avg_plan else 0
+                    st.metric(
+                        f"{inv_cause_icons[cause_id]} {inv_cause_names[cause_id]}",
+                        f"{avg_actual:.1f}점", f"{avg_gap:+.1f}%"
+                    )
+
+            # 사업부별 원인 히트맵
+            st.markdown("#### 사업부 × 원인 진단 Matrix")
+            inv_pivot = inv_data.pivot_table(
+                index="bu_name", columns="kpi_id", values="gap_pct", aggfunc="mean"
+            ).fillna(0)
+            inv_pivot.columns = [inv_cause_names.get(c, c) for c in inv_pivot.columns]
+
+            fig_inv_heat = go.Figure(go.Heatmap(
+                z=inv_pivot.values * 100,
+                x=inv_pivot.columns.tolist(),
+                y=inv_pivot.index.tolist(),
+                colorscale=[[0, "#C00000"], [0.5, "#FFFFD4"], [1, "#2F5496"]],
+                zmid=0, texttemplate="%{z:.1f}%",
+                hovertemplate="사업부: %{y}<br>원인: %{x}<br>Gap: %{z:.1f}%",
+            ))
+            fig_inv_heat.update_layout(height=280, margin=dict(t=10, b=10))
+            st.plotly_chart(fig_inv_heat, use_container_width=True)
+
+            # 원인별 하위 Driver 상세
+            st.markdown("#### 원인별 상세 Driver")
+            inv_children = {
+                "INV_MARKET": [("INV_MKT_DEMAND", "수요 변동"), ("INV_MKT_PRICE", "판매단가 변동"),
+                               ("INV_MKT_COMPETE", "경쟁 환경")],
+                "INV_EXEC": [("INV_EXEC_RATE", "투자집행률"), ("INV_EXEC_DELAY", "일정 지연"),
+                              ("INV_EXEC_PERMIT", "인허가 진척")],
+                "INV_COST": [("INV_COST_MAT", "원자재 원가"), ("INV_COST_LABOR", "인건비 초과"),
+                              ("INV_COST_DESIGN", "설계변경 비용")],
+            }
+
+            detail_cols = st.columns(3)
+            for col, (parent_id, children) in zip(detail_cols, inv_children.items()):
+                with col:
+                    st.markdown(f"**{inv_cause_icons[parent_id]} {inv_cause_names[parent_id]}**")
+                    for child_id, child_name in children:
+                        child_data = kpi_vals_df6[kpi_vals_df6["kpi_id"] == child_id]
+                        if not child_data.empty:
+                            avg_val = child_data["actual"].mean()
+                            avg_gap = child_data["gap_pct"].mean() * 100
+                            severity = "🔴" if abs(avg_gap) > 10 else "🟡" if abs(avg_gap) > 5 else "🟢"
+                            st.markdown(f"{severity} {child_name}: **{avg_val:.1f}** ({avg_gap:+.1f}%)")
+                        else:
+                            st.markdown(f"⚪ {child_name}: 데이터 없음")
+    else:
+        st.info("투자 성과 데이터가 없습니다.")
