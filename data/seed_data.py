@@ -11,7 +11,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from config.settings import BUSINESS_UNITS, DEMO_MONTHS, DEMO_SEED
 from db.models import (
     init_db, SessionLocal, BusinessUnit, Financial,
-    KPIDefinition, KPIValue, BizQuestion, RiskItem
+    KPIDefinition, KPIValue, BizQuestion, RiskItem,
+    Project, EVMMonthly
 )
 
 
@@ -293,6 +294,105 @@ def generate_risk_items(session, rng):
         ))
 
 
+def generate_evm_projects(session, rng):
+    """EPC 프로젝트 및 EVM 시계열 데이터 생성"""
+    from datetime import date
+    from dateutil.relativedelta import relativedelta
+
+    projects = [
+        ("PJT-001", "Samsung 평택 반도체 Fab", "semiconductor", "Samsung Electronics",
+         4200, 36, "active", 0.92, 1.08),  # CPI, cost_factor
+        ("PJT-002", "SK hynix 이천 M16", "semiconductor", "SK hynix",
+         3800, 30, "active", 0.97, 1.02),
+        ("PJT-003", "LG Energy Solution 배터리 공장", "battery", "LG Energy Solution",
+         2200, 24, "active", 1.03, 0.98),
+        ("PJT-004", "삼성바이오로직스 4공장", "pharma", "Samsung Biologics",
+         1800, 28, "delayed", 0.88, 1.15),
+        ("PJT-005", "SK E&S LNG 터미널", "energy", "SK E&S",
+         2800, 32, "active", 0.95, 1.05),
+    ]
+
+    today = pd.Timestamp(datetime.now().date())
+    base_start = today - pd.DateOffset(months=18)
+
+    for proj_id, name, ptype, client, contract, duration, status, base_spi, cost_factor in projects:
+        start_date = (base_start + pd.DateOffset(months=rng.integers(-3, 4))).date()
+        end_date = (pd.Timestamp(start_date) + pd.DateOffset(months=duration)).date()
+        bac = contract * rng.uniform(0.92, 0.98)  # BAC < 계약금액
+
+        session.add(Project(
+            id=proj_id, name=name, bu_id="EPC_Hitech", project_type=ptype,
+            client=client, contract_value=contract, start_date=start_date,
+            end_date=end_date, duration_months=duration, status=status, bac=round(bac, 1)
+        ))
+
+        # EVM 월별 데이터 생성
+        elapsed_months = min(
+            (today.year - start_date.year) * 12 + today.month - start_date.month,
+            duration
+        )
+
+        # S-Curve 생성 (베타 분포 기반 누적)
+        for m in range(1, elapsed_months + 1):
+            t = m / duration  # 진행률 (0~1)
+
+            # PV: 계획 S-Curve (대칭 베타)
+            from scipy.stats import beta as beta_dist
+            pv_rate = beta_dist.cdf(t, 2.5, 2.5) * 100
+            pv = bac * pv_rate / 100
+
+            # EV: 실적 S-Curve (SPI 반영, 약간의 노이즈)
+            spi_noise = rng.normal(0, 0.02)
+            # 프로젝트 후반부로 갈수록 지연 심화 (delayed 프로젝트)
+            if status == "delayed" and t > 0.4:
+                spi_adj = base_spi - (t - 0.4) * 0.15
+            else:
+                spi_adj = base_spi + spi_noise
+            spi_adj = max(0.7, min(1.15, spi_adj))
+
+            ev_rate = beta_dist.cdf(t * spi_adj, 2.5, 2.5) * 100
+            ev_rate = min(ev_rate, 100)
+            ev = bac * ev_rate / 100
+
+            # AC: 실제 원가 (CPI 반영)
+            cpi_noise = rng.normal(0, 0.03)
+            cpi_val = (1 / cost_factor) + cpi_noise
+            cpi_val = max(0.75, min(1.2, cpi_val))
+            ac = ev / cpi_val if cpi_val else ev
+
+            # Variances
+            sv = ev - pv
+            cv = ev - ac
+            spi = ev / pv if pv > 0 else 1.0
+            cpi = ev / ac if ac > 0 else 1.0
+
+            # Earned Schedule 계산
+            # ES = 시점 t에서 EV가 PV와 같아지는 시점 (보간)
+            es = m * spi  # 간이 계산: ES ≈ AT × SPI
+            ed = m  # Earned Duration = 실제 경과 기간
+            spi_t = es / ed if ed > 0 else 1.0
+
+            # Forecasting
+            eac = bac / cpi if cpi > 0 else bac
+            etc = eac - ac
+            vac = bac - eac
+            ieac_t = duration / spi_t if spi_t > 0 else duration
+            tcpi = (bac - ev) / (bac - ac) if (bac - ac) > 0 else 1.0
+
+            period_date = (pd.Timestamp(start_date) + pd.DateOffset(months=m)).date()
+
+            session.add(EVMMonthly(
+                project_id=proj_id, period=period_date, month_seq=m,
+                pv=round(pv, 1), ev=round(ev, 1), ac=round(ac, 1),
+                pv_rate=round(pv_rate, 2), ev_rate=round(ev_rate, 2),
+                sv=round(sv, 1), cv=round(cv, 1),
+                spi=round(spi, 4), cpi=round(cpi, 4),
+                es=round(es, 2), ed=round(ed, 2), es_spi_t=round(spi_t, 4),
+                eac=round(eac, 1), etc=round(etc, 1), vac=round(vac, 1),
+                ieac_t=round(ieac_t, 2), tcpi=round(tcpi, 4),
+            ))
+
+
 def seed_all():
     """전체 가상 데이터 생성"""
     rng = np.random.default_rng(DEMO_SEED)
@@ -301,7 +401,8 @@ def seed_all():
 
     try:
         # 기존 데이터 삭제
-        for table in [RiskItem, KPIValue, Financial, BizQuestion, KPIDefinition, BusinessUnit]:
+        for table in [EVMMonthly, Project, RiskItem, KPIValue, Financial,
+                      BizQuestion, KPIDefinition, BusinessUnit]:
             session.query(table).delete()
         session.commit()
 
@@ -317,6 +418,7 @@ def seed_all():
         generate_kpi_values(session, rng)
         generate_biz_questions(session)
         generate_risk_items(session, rng)
+        generate_evm_projects(session, rng)
         session.commit()
 
         # Summary
@@ -327,6 +429,8 @@ def seed_all():
         print(f"KPI Values: {session.query(KPIValue).count()}")
         print(f"Biz Questions: {session.query(BizQuestion).count()}")
         print(f"Risk Items: {session.query(RiskItem).count()}")
+        print(f"Projects: {session.query(Project).count()}")
+        print(f"EVM Records: {session.query(EVMMonthly).count()}")
 
     finally:
         session.close()

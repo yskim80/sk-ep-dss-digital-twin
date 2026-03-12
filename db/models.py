@@ -121,6 +121,65 @@ class RiskItem(Base):
     business_unit = relationship("BusinessUnit", back_populates="risks")
 
 
+class Project(Base):
+    """EPC 프로젝트 마스터"""
+    __tablename__ = "projects"
+
+    id = Column(String(20), primary_key=True)
+    name = Column(String(200), nullable=False)
+    bu_id = Column(String(20), ForeignKey("business_units.id"), nullable=False)
+    project_type = Column(String(30))      # semiconductor, battery, display, pharma, energy
+    client = Column(String(100))
+    contract_value = Column(Float)         # 계약금액 (억원)
+    start_date = Column(Date)
+    end_date = Column(Date)                # 계획 준공일
+    duration_months = Column(Integer)      # 총 공기 (개월)
+    status = Column(String(20), default="active")  # active, completed, delayed, at_risk
+    bac = Column(Float)                    # Budget At Completion (억원)
+
+    business_unit = relationship("BusinessUnit")
+    evm_data = relationship("EVMMonthly", back_populates="project")
+
+
+class EVMMonthly(Base):
+    """EVM 월별 시계열 데이터"""
+    __tablename__ = "evm_monthly"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    project_id = Column(String(20), ForeignKey("projects.id"), nullable=False)
+    period = Column(Date, nullable=False)           # 측정 월
+    month_seq = Column(Integer)                     # 프로젝트 시작 후 경과 월
+
+    # Core EVM metrics
+    pv = Column(Float)              # Planned Value (BCWS) - 계획 공정률 기반 누적
+    ev = Column(Float)              # Earned Value (BCWP) - 실적 공정률 기반 누적
+    ac = Column(Float)              # Actual Cost (ACWP) - 실제 투입 원가 누적
+
+    # Schedule metrics
+    pv_rate = Column(Float)         # 계획 공정률 (%)
+    ev_rate = Column(Float)         # 실적 공정률 (%)
+
+    # Derived (computed from PV/EV/AC)
+    sv = Column(Float)              # Schedule Variance = EV - PV
+    cv = Column(Float)              # Cost Variance = EV - AC
+    spi = Column(Float)             # Schedule Performance Index = EV / PV
+    cpi = Column(Float)             # Cost Performance Index = EV / AC
+
+    # Earned Schedule
+    es = Column(Float)              # Earned Schedule (개월) - EV가 PV와 만나는 시점
+    ed = Column(Float)              # Earned Duration (개월) - 실제 경과 기간
+    es_spi_t = Column(Float)        # SPI(t) = ES / AT (시간 기반 SPI)
+
+    # Forecasting
+    eac = Column(Float)             # Estimate At Completion = BAC / CPI
+    etc = Column(Float)             # Estimate To Complete = EAC - AC
+    vac = Column(Float)             # Variance At Completion = BAC - EAC
+    ieac_t = Column(Float)          # Independent EAC(t) = PD / SPI(t) (일정 기반)
+    tcpi = Column(Float)            # To-Complete Performance Index = (BAC-EV)/(BAC-AC)
+
+    project = relationship("Project", back_populates="evm_data")
+
+
 class ScenarioRun(Base):
     """What-if 시뮬레이션 실행 이력"""
     __tablename__ = "scenario_runs"

@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
-from db.models import SessionLocal, RiskItem, KPIValue
+from db.models import SessionLocal, RiskItem, KPIValue, Project, EVMMonthly
 from config.settings import BUSINESS_UNITS
 
 st.set_page_config(page_title="M5. Early Warning", page_icon="🚨", layout="wide")
@@ -111,3 +111,95 @@ if not alert_df.empty:
         st.success("최근 3개월 내 심각한 KPI 이탈이 없습니다.")
 else:
     st.success("KPI 이탈 경보가 없습니다.")
+
+
+# ════════════════════════════════════════════════
+# EVM 기반 조기 경보
+# ════════════════════════════════════════════════
+st.divider()
+st.subheader("📐 EVM 프로젝트 조기 경보")
+st.caption("CPI/SPI < 0.95 주의, < 0.90 경고 | TCPI > 1.10 달성 곤란 | EAC > BAC 원가 초과")
+
+
+@st.cache_data(ttl=300)
+def load_evm_alerts():
+    session = SessionLocal()
+    try:
+        projects = session.query(Project).all()
+        alerts = []
+        for proj in projects:
+            evm_records = session.query(EVMMonthly).filter(
+                EVMMonthly.project_id == proj.id
+            ).order_by(EVMMonthly.month_seq.desc()).first()
+
+            if not evm_records:
+                continue
+
+            e = evm_records
+            proj_alerts = []
+
+            # SPI 경보
+            if e.spi < 0.90:
+                proj_alerts.append(("🔴", "SPI 경고", f"SPI={e.spi:.3f} (공정 심각 지연)"))
+            elif e.spi < 0.95:
+                proj_alerts.append(("🟡", "SPI 주의", f"SPI={e.spi:.3f} (공정 지연)"))
+
+            # CPI 경보
+            if e.cpi < 0.90:
+                proj_alerts.append(("🔴", "CPI 경고", f"CPI={e.cpi:.3f} (원가 심각 초과)"))
+            elif e.cpi < 0.95:
+                proj_alerts.append(("🟡", "CPI 주의", f"CPI={e.cpi:.3f} (원가 초과)"))
+
+            # SPI(t) 경보
+            if e.es_spi_t < 0.90:
+                proj_alerts.append(("🔴", "SPI(t) 경고", f"SPI(t)={e.es_spi_t:.3f} (ES 기반 심각 지연)"))
+            elif e.es_spi_t < 0.95:
+                proj_alerts.append(("🟡", "SPI(t) 주의", f"SPI(t)={e.es_spi_t:.3f} (ES 기반 지연)"))
+
+            # TCPI 경보
+            if e.tcpi > 1.10:
+                proj_alerts.append(("🔴", "TCPI 경고", f"TCPI={e.tcpi:.3f} (예산 내 완료 곤란)"))
+            elif e.tcpi > 1.05:
+                proj_alerts.append(("🟡", "TCPI 주의", f"TCPI={e.tcpi:.3f} (예산 여유 부족)"))
+
+            # EAC > BAC
+            if e.vac < 0:
+                pct = (e.eac / proj.bac - 1) * 100
+                severity = "🔴" if pct > 10 else "🟡"
+                proj_alerts.append((severity, "EAC 초과",
+                                    f"EAC={e.eac:,.0f}억 > BAC={proj.bac:,.0f}억 ({pct:+.1f}%)"))
+
+            for icon, alert_type, detail in proj_alerts:
+                alerts.append({
+                    "심각도": icon,
+                    "프로젝트": proj.name,
+                    "경보 유형": alert_type,
+                    "상세": detail,
+                    "공정률": f"{e.ev_rate:.1f}%",
+                    "경과월": f"{e.month_seq}개월",
+                })
+
+        return pd.DataFrame(alerts) if alerts else pd.DataFrame()
+    finally:
+        session.close()
+
+
+evm_alert_df = load_evm_alerts()
+
+if not evm_alert_df.empty:
+    # 요약
+    red_count = (evm_alert_df["심각도"] == "🔴").sum()
+    yellow_count = (evm_alert_df["심각도"] == "🟡").sum()
+    alert_projects = evm_alert_df["프로젝트"].nunique()
+
+    acol1, acol2, acol3 = st.columns(3)
+    acol1.metric("경고 (🔴)", f"{red_count}건")
+    acol2.metric("주의 (🟡)", f"{yellow_count}건")
+    acol3.metric("경보 프로젝트", f"{alert_projects}건")
+
+    st.dataframe(
+        evm_alert_df.sort_values("심각도"),
+        use_container_width=True, hide_index=True,
+    )
+else:
+    st.success("EVM 기반 경보가 없습니다. 모든 프로젝트가 정상 범위 내입니다.")
