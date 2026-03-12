@@ -51,12 +51,12 @@ for col, (key, name) in zip(cols, DECISION_AREAS.items()):
 
 st.divider()
 
-# 5대 모듈
-st.subheader("시스템 5대 모듈")
-module_colors = ["#2F5496", "#548235", "#BF8F00", "#7030A0", "#C00000"]
-module_icons = ["📊", "🌳", "💬", "🔮", "🚨"]
+# 6대 모듈
+st.subheader("시스템 6대 모듈")
+module_colors = ["#2F5496", "#548235", "#BF8F00", "#7030A0", "#C00000", "#0097A7"]
+module_icons = ["📊", "🌳", "💬", "🔮", "🚨", "📐"]
 
-cols = st.columns(5)
+cols = st.columns(6)
 for col, (key, name), color, icon in zip(cols, MODULES.items(), module_colors, module_icons):
     with col:
         st.markdown(f"""
@@ -72,32 +72,44 @@ st.divider()
 st.subheader("Digital Twin 환경 상태")
 
 # DB 자동 초기화 (Streamlit Cloud에서 run.py를 거치지 않는 경우 대비)
+# 스키마/데이터 변경 시 SEED_VERSION을 올려 자동 재생성
+SEED_VERSION = 3
 try:
     from db.models import SessionLocal, engine
     from sqlalchemy import inspect, text
     insp = inspect(engine)
     table_count = len(insp.get_table_names())
+
+    need_reseed = False
     if table_count == 0:
-        # 테이블이 없으면 자동 seed
-        from data.seed_data import seed_all
-        seed_all()
-        insp = inspect(engine)
-        table_count = len(insp.get_table_names())
-    session = SessionLocal()
-    total_rows = sum(
-        session.execute(text(f"SELECT COUNT(*) FROM {t}")).scalar()
-        for t in insp.get_table_names()
-    )
-    if total_rows == 0:
-        session.close()
-        from data.seed_data import seed_all
-        seed_all()
+        need_reseed = True
+    else:
         session = SessionLocal()
         total_rows = sum(
             session.execute(text(f"SELECT COUNT(*) FROM {t}")).scalar()
             for t in insp.get_table_names()
         )
-    session.close()
+        if total_rows == 0:
+            need_reseed = True
+        else:
+            # seed version 체크 (kpi_definitions 수로 판별)
+            kpi_count = session.execute(text("SELECT COUNT(*) FROM kpi_definitions")).scalar()
+            if kpi_count < 80:  # SEED_VERSION 3 기준 83개
+                need_reseed = True
+        session.close()
+
+    if need_reseed:
+        from data.seed_data import seed_all
+        seed_all()
+        insp = inspect(engine)
+        table_count = len(insp.get_table_names())
+        session = SessionLocal()
+        total_rows = sum(
+            session.execute(text(f"SELECT COUNT(*) FROM {t}")).scalar()
+            for t in insp.get_table_names()
+        )
+        session.close()
+
     db_active = True
 except Exception:
     table_count, total_rows, db_active = 0, 0, False
