@@ -297,7 +297,6 @@ def generate_risk_items(session, rng):
 def generate_evm_projects(session, rng):
     """EPC 프로젝트 및 EVM 시계열 데이터 생성"""
     from datetime import date
-    from dateutil.relativedelta import relativedelta
 
     projects = [
         ("PJT-001", "SK hynix 청주 M15X 반도체 Fab", "semiconductor", "SK hynix",

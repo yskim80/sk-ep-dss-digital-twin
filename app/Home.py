@@ -71,17 +71,32 @@ st.divider()
 # 디지털 트윈 상태
 st.subheader("Digital Twin 환경 상태")
 
-# DB 실시간 통계
+# DB 자동 초기화 (Streamlit Cloud에서 run.py를 거치지 않는 경우 대비)
 try:
     from db.models import SessionLocal, engine
     from sqlalchemy import inspect, text
-    session = SessionLocal()
     insp = inspect(engine)
     table_count = len(insp.get_table_names())
+    if table_count == 0:
+        # 테이블이 없으면 자동 seed
+        from data.seed_data import seed_all
+        seed_all()
+        insp = inspect(engine)
+        table_count = len(insp.get_table_names())
+    session = SessionLocal()
     total_rows = sum(
         session.execute(text(f"SELECT COUNT(*) FROM {t}")).scalar()
         for t in insp.get_table_names()
     )
+    if total_rows == 0:
+        session.close()
+        from data.seed_data import seed_all
+        seed_all()
+        session = SessionLocal()
+        total_rows = sum(
+            session.execute(text(f"SELECT COUNT(*) FROM {t}")).scalar()
+            for t in insp.get_table_names()
+        )
     session.close()
     db_active = True
 except Exception:

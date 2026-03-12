@@ -261,9 +261,8 @@ with tab1:
     is_single_area = selected_area is not None
     orient = "LR"
     if is_single_area:
-        # 노드 수에 따라 높이 동적 조정
-        node_count = sum(1 for _ in pd.DataFrame(kpi_tree).iterrows()
-                         if pd.DataFrame(kpi_tree).iloc[_[0]]["category"] == selected_area) if selected_area else 0
+        tree_tmp = pd.DataFrame(kpi_tree)
+        node_count = len(tree_tmp[tree_tmp["category"] == selected_area])
         chart_height = max(700, node_count * 55)
     else:
         chart_height = 1000
