@@ -41,9 +41,9 @@ SOURCE_SYSTEMS = {
         "owner": "PM실",
         "color": "#2F5496",
         "tables": {
-            "PROJ/PRPS": {"desc": "프로젝트/WBS 마스터", "target_table": "business_units", "target_cols": ["id", "name", "biz_type"], "frequency": "수시"},
-            "COOIS": {"desc": "프로젝트 원가 실적 (EV/AC/PV)", "target_table": "kpi_values", "target_cols": ["O-001 CPI", "O-002 SPI", "O-003 EAC"], "frequency": "주별"},
-            "AFRU": {"desc": "공정 확인 (진척률)", "target_table": "kpi_values", "target_cols": ["O-004 공정진척률"], "frequency": "주별"},
+            "PROJ/PRPS": {"desc": "프로젝트/WBS 마스터", "target_table": "projects", "target_cols": ["id", "name", "project_type", "client", "contract_value", "bac"], "frequency": "수시"},
+            "COOIS": {"desc": "프로젝트 원가 실적 (EV/AC/PV)", "target_table": "evm_monthly", "target_cols": ["pv", "ev", "ac", "sv", "cv", "spi", "cpi"], "frequency": "주별"},
+            "AFRU": {"desc": "공정 확인 (진척률/Earned Schedule)", "target_table": "evm_monthly", "target_cols": ["pv_rate", "ev_rate", "es", "es_spi_t", "eac", "tcpi"], "frequency": "주별"},
             "J_AUFNR": {"desc": "수주/계약 (수주잔고/VO)", "target_table": "financials", "target_cols": ["backlog"], "frequency": "월별"},
         },
     },
@@ -114,13 +114,15 @@ SOURCE_SYSTEMS = {
 
 # DSS 테이블 -> 모듈 매핑
 TABLE_MODULE_MAP = {
-    "business_units": ["M1", "M2", "M3", "M4", "M5"],
+    "business_units": ["M1", "M2", "M3", "M4", "M5", "M6"],
     "financials": ["M1", "M2", "M4"],
     "kpi_definitions": ["M1", "M2", "M3"],
     "kpi_values": ["M1", "M2", "M3", "M5"],
     "biz_questions": ["M3"],
     "risk_items": ["M5", "M4"],
     "scenario_runs": ["M4"],
+    "projects": ["M6"],
+    "evm_monthly": ["M6"],
 }
 
 # ══════════════════════════════════════════════════
@@ -207,7 +209,7 @@ with tab1:
         })
 
     # 모듈 노드 (우측 열)
-    module_colors_map = {"M1": "#2F5496", "M2": "#548235", "M3": "#BF8F00", "M4": "#7030A0", "M5": "#C00000"}
+    module_colors_map = {"M1": "#2F5496", "M2": "#548235", "M3": "#BF8F00", "M4": "#7030A0", "M5": "#C00000", "M6": "#0097A7"}
     mod_list = list(MODULES.items())
     mod_y_step = 520 // max(len(mod_list), 1)
     for i, (mod_key, mod_name) in enumerate(mod_list):
@@ -442,7 +444,7 @@ with tab1:
     leg_cols = st.columns(3)
     leg_cols[0].markdown("🔷 **소스 시스템** (좌측) - ERP, PMS, IoT, 외부 데이터 등")
     leg_cols[1].markdown("🟩 **DSS 테이블** (중앙) - 디지털 트윈 DB 7개 테이블 (실린더 아이콘)")
-    leg_cols[2].markdown("🔶 **시스템 모듈** (우측) - M1~M5 5대 모듈")
+    leg_cols[2].markdown("🔶 **시스템 모듈** (우측) - M1~M6 6대 모듈")
 
 
 # ══════════════════════════════════════════════════
@@ -566,6 +568,8 @@ with tab3:
         "biz_questions": "#7030A0",
         "risk_items": "#C00000",
         "scenario_runs": "#7030A0",
+        "projects": "#0097A7",
+        "evm_monthly": "#0097A7",
     }
 
     # 원형 배치 좌표 계산
@@ -841,9 +845,9 @@ with tab4:
         {
             "phase": "Phase 2: EPC 프로젝트 데이터",
             "systems": ["SAP PS (Project System)"],
-            "tables": ["kpi_values (EVM)"],
+            "tables": ["projects", "evm_monthly", "kpi_values (EVM)"],
             "priority": "P1 (최우선)",
-            "desc": "CPI/SPI/EAC/공정진척률 연결. M2 Driver Tree + M5 Early Warning 운영 가능.",
+            "desc": "CPI/SPI/EAC/공정진척률/Earned Schedule 연결. M2 Driver Tree + M5 Early Warning + M6 EVM Monitor 운영 가능.",
             "color": "#2F5496",
         },
         {

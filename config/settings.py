@@ -28,13 +28,14 @@ DECISION_AREAS = {
     "risk": "리스크 관리 (Risk)",
 }
 
-# 5대 모듈
+# 6대 모듈
 MODULES = {
     "M1": "Executive Dashboard",
     "M2": "Value Driver & Drill-down",
     "M3": "Biz Question Q&A",
     "M4": "Scenario / What-if Simulation",
     "M5": "Early Warning Center",
+    "M6": "EVM Monitor",
 }
 
 # Demo data config
