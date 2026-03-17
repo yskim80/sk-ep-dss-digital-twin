@@ -11,6 +11,7 @@ from db.models import SessionLocal, Financial, BusinessUnit
 from config.settings import BUSINESS_UNITS
 
 st.set_page_config(page_title="M1. Executive Dashboard", page_icon="📊", layout="wide")
+from db_init import ensure_db; ensure_db()
 st.title("📊 M1. Executive Dashboard")
 st.caption("SK네트웍스 지주사 - 계열사 포트폴리오 종합 대시보드")
 

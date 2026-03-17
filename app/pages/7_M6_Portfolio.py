@@ -19,6 +19,7 @@ from db.models import SessionLocal, PortfolioHolding, InvestmentProject, Financi
 from config.settings import BUSINESS_UNITS
 
 st.set_page_config(page_title="M6. Portfolio Management", page_icon="💼", layout="wide")
+from db_init import ensure_db; ensure_db()
 st.title("💼 M6. Portfolio Management")
 st.caption("SK네트웍스 지주사 — AI 기반 투자 포트폴리오 의사결정 지원")
 

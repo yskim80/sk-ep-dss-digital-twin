@@ -14,6 +14,7 @@ from config.settings import BUSINESS_UNITS, DECISION_AREAS, MODULES
 from sqlalchemy import inspect, text
 
 st.set_page_config(page_title="Data Connection Map", page_icon="🔗", layout="wide")
+from db_init import ensure_db; ensure_db()
 st.title("🔗 Data Connection Map")
 st.caption("소스 시스템 -> DSS 테이블 -> 모듈 연결 현황 및 데이터 리니지")
 

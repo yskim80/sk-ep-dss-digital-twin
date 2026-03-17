@@ -132,8 +132,9 @@ try:
         session.close()
 
     db_active = True
-except Exception:
+except Exception as e:
     table_count, total_rows, db_active = 0, 0, False
+    st.error(f"DB 초기화 오류: {e}")
 
 col1, col2, col3, col4 = st.columns(4)
 with col1:

@@ -11,6 +11,7 @@ from db.models import SessionLocal, RiskItem, KPIValue
 from config.settings import BUSINESS_UNITS
 
 st.set_page_config(page_title="M5. Early Warning", page_icon="🚨", layout="wide")
+from db_init import ensure_db; ensure_db()
 st.title("🚨 M5. Early Warning Center")
 st.caption("SK네트웍스 지주사 - 계열사 선행지표 이탈/패턴 변화 조기 감지 및 리스크 경보")
 

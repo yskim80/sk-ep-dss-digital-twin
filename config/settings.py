@@ -3,15 +3,28 @@ SK네트웍스 Decision Intelligence - 디지털 트윈 설정
 지주사(Holding Company) 관점 - 계열사 관리 목적
 """
 import os
+import tempfile
 from pathlib import Path
 
 # Paths
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
-DB_DIR = BASE_DIR / "db"
 
-# Database
-DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{DB_DIR / 'skn_dss.db'}")
+# Database - Streamlit Cloud 호환: db/ 폴더 쓰기불가 시 /tmp 사용
+DB_DIR = BASE_DIR / "db"
+_db_path = DB_DIR / "skn_dss.db"
+try:
+    DB_DIR.mkdir(parents=True, exist_ok=True)
+    # 쓰기 테스트
+    _test_file = DB_DIR / ".write_test"
+    _test_file.touch()
+    _test_file.unlink()
+except (OSError, PermissionError):
+    DB_DIR = Path(tempfile.gettempdir()) / "skn_dss"
+    DB_DIR.mkdir(parents=True, exist_ok=True)
+    _db_path = DB_DIR / "skn_dss.db"
+
+DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{_db_path.as_posix()}")
 
 # Business Structure - SK네트웍스 계열사 구조
 BUSINESS_UNITS = {

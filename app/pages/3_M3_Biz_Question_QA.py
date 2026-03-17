@@ -10,6 +10,7 @@ from db.models import SessionLocal, BizQuestion, Financial, KPIValue, KPIDefinit
 from config.settings import DECISION_AREAS, BUSINESS_UNITS
 
 st.set_page_config(page_title="M3. Biz Q&A", page_icon="💬", layout="wide")
+from db_init import ensure_db; ensure_db()
 st.title("💬 M3. Biz Question Q&A")
 st.caption("Claude API 기반 - SK네트웍스 지주사 경영진 비즈니스 질문에 데이터 기반 답변 제공")
 

@@ -11,7 +11,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from db.models import SessionLocal, Financial, KPIDefinition, KPIValue
 from config.settings import BUSINESS_UNITS, DECISION_AREAS
 
-st.set_page_config(page_title="M2. Value Driver Tree", page_icon="<C2><AC>", layout="wide")
+st.set_page_config(page_title="M2. Value Driver Tree", page_icon="🌳", layout="wide")
+from db_init import ensure_db; ensure_db()
 st.title("M2. Value Driver & Drill-down")
 st.caption("KPI 변동의 근본원인을 인터랙티브 Driver Tree로 분해/추적")
 
@@ -160,8 +161,9 @@ with tab1:
                 "CAPEX": {"val": c_sum["capex"], "gap": round((c_sum["capex"]/p_sum["capex"]-1)*100, 1) if p_sum["capex"] else 0, "unit": "억원"},
             }
             # 사업부별 매출
-            bu_rev_map = {"EPC_Hitech": "REV_EPC", "GreenEnergy": "REV_GREEN",
-                          "Recycling": "REV_RECYCLE", "Solution": "REV_SOL"}
+            bu_rev_map = {"SK_Magic": "REV_MAGIC", "SK_Rentacar": "REV_RENT",
+                          "Mintit": "REV_MINTIT", "Walkerhill": "REV_WALKER",
+                          "SKN_Service": "REV_SVC"}
             for bu_id, kpi_id in bu_rev_map.items():
                 bu_data = current[current["bu_id"] == bu_id]
                 if not bu_data.empty:
@@ -693,8 +695,9 @@ with tab3:
 
                 # BU별 매출 KPI
                 bu_rev_map = {
-                    "REV_EPC": "EPC_Hitech", "REV_GREEN": "GreenEnergy",
-                    "REV_RECYCLE": "Recycling", "REV_SOL": "Solution",
+                    "REV_MAGIC": "SK_Magic", "REV_RENT": "SK_Rentacar",
+                    "REV_MINTIT": "Mintit", "REV_WALKER": "Walkerhill",
+                    "REV_SVC": "SKN_Service",
                 }
                 if not val_str and child["id"] in bu_rev_map and not current.empty:
                     bu_id = bu_rev_map[child["id"]]
@@ -997,9 +1000,9 @@ with tab6:
         st.markdown("### 포트폴리오 ROIC 기여도")
         st.caption("어느 사업이 ROIC 하락을 주도하는가?")
 
-        roic_ids = ["ROIC_EPC", "ROIC_GREEN", "ROIC_RECYCLE", "ROIC_SOL"]
-        roic_names = {"ROIC_EPC": "Hi-tech EPC", "ROIC_GREEN": "Green Energy",
-                      "ROIC_RECYCLE": "Recycling", "ROIC_SOL": "Solution"}
+        roic_ids = ["ROE_MAGIC", "ROE_RENT", "ROE_MINTIT", "ROE_WALKER", "ROE_SVC"]
+        roic_names = {"ROE_MAGIC": "SK매직", "ROE_RENT": "SK렌터카",
+                      "ROE_MINTIT": "민팃", "ROE_WALKER": "워커힐", "ROE_SVC": "SK네트웍스서비스"}
         roic_data = kpi_vals_df6[kpi_vals_df6["kpi_id"].isin(roic_ids)]
 
         if not roic_data.empty:

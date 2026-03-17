@@ -11,6 +11,7 @@ from db.models import SessionLocal, Financial
 from config.settings import BUSINESS_UNITS
 
 st.set_page_config(page_title="M4. Scenario Simulation", page_icon="🔮", layout="wide")
+from db_init import ensure_db; ensure_db()
 st.title("🔮 M4. Scenario / What-if Simulation")
 st.caption("SK네트웍스 지주사 - 변수를 조정하여 계열사 포트폴리오 시나리오 시뮬레이션")
 
