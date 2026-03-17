@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from db.models import SessionLocal, Financial, BusinessUnit
 from config.settings import BUSINESS_UNITS
 

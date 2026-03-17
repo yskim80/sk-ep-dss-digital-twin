@@ -15,6 +15,7 @@ from pathlib import Path
 from datetime import datetime
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from db.models import SessionLocal, PortfolioHolding, InvestmentProject, Financial, KPIValue
 from config.settings import BUSINESS_UNITS
 

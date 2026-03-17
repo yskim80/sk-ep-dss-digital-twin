@@ -9,6 +9,7 @@ from pathlib import Path
 from datetime import datetime
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from db.models import SessionLocal, engine
 from config.settings import BUSINESS_UNITS, DECISION_AREAS, MODULES
 from sqlalchemy import inspect, text
