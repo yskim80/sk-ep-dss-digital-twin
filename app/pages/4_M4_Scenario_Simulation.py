@@ -1,4 +1,4 @@
-"""M4. Scenario / What-if Simulation"""
+"""M4. Scenario / What-if Simulation - 지주사 관점"""
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -12,7 +12,7 @@ from config.settings import BUSINESS_UNITS
 
 st.set_page_config(page_title="M4. Scenario Simulation", page_icon="🔮", layout="wide")
 st.title("🔮 M4. Scenario / What-if Simulation")
-st.caption("변수를 조정하여 미래 시나리오를 시뮬레이션하고 최적안 도출")
+st.caption("SK네트웍스 지주사 - 변수를 조정하여 계열사 포트폴리오 시나리오 시뮬레이션")
 
 @st.cache_data(ttl=300)
 def load_base_data():
@@ -40,45 +40,55 @@ recent = df[df["period"] >= df["period"].max() - pd.DateOffset(months=5)]
 base = recent.groupby("bu_id")[["revenue", "cogs", "opex", "ebitda", "capex"]].mean()
 
 st.subheader("시나리오 변수 설정")
-st.markdown("슬라이더를 조정하여 변수 변동에 따른 영향을 확인하세요.")
+st.markdown("슬라이더를 조정하여 변수 변동에 따른 계열사별 영향을 확인하세요.")
 
 col1, col2 = st.columns(2)
 
 with col1:
     st.markdown("**외부 환경 변수**")
-    fx_change = st.slider("환율 변동 (%)", -20.0, 20.0, 0.0, 1.0)
-    material_change = st.slider("원자재가격 변동 (%)", -30.0, 30.0, 0.0, 1.0)
-    demand_change = st.slider("수요 변동 (%)", -20.0, 20.0, 0.0, 1.0)
+    economy_change = st.slider("경기변동 영향 (%)", -15.0, 15.0, 0.0, 1.0, help="소비 심리, 경기 순환 영향")
+    interest_change = st.slider("금리 변동 (%p)", -2.0, 2.0, 0.0, 0.25, help="기준금리 변동 → 렌탈/리스 수요 영향")
+    competition = st.slider("경쟁 심화 (%)", -20.0, 0.0, 0.0, 1.0, help="시장 점유율 방어/잠식 효과")
 
 with col2:
     st.markdown("**내부 운영 변수**")
+    churn_improve = st.slider("이탈률 개선 (%)", -5.0, 5.0, 0.0, 0.5, help="고객 유지 정책 효과")
     cost_reduction = st.slider("비용 절감 목표 (%)", 0.0, 20.0, 0.0, 1.0)
-    capex_adjust = st.slider("CAPEX 조정 (%)", -30.0, 30.0, 0.0, 1.0)
-    price_adjust = st.slider("판매가격 조정 (%)", -10.0, 10.0, 0.0, 0.5)
+    new_biz_invest = st.slider("신사업 추가 투자 (억원/월)", 0.0, 100.0, 0.0, 10.0)
 
 st.divider()
 
 # 시뮬레이션 계산
 st.subheader("시뮬레이션 결과")
 
+# 계열사별 민감도 설정
+sensitivity = {
+    "SK_Magic": {"economy": 0.3, "interest": 0.15, "competition": 0.5, "churn": 0.6},
+    "SK_Rentacar": {"economy": 0.4, "interest": 0.4, "competition": 0.3, "churn": 0.4},
+    "Mintit": {"economy": 0.5, "interest": 0.1, "competition": 0.4, "churn": 0.2},
+    "Walkerhill": {"economy": 0.7, "interest": 0.1, "competition": 0.3, "churn": 0.1},
+    "SKN_Service": {"economy": 0.2, "interest": 0.05, "competition": 0.4, "churn": 0.3},
+}
+
 results = []
 for bu_id, row in base.iterrows():
     bu_name = BUSINESS_UNITS.get(bu_id, {}).get("name", bu_id)
-    bu_type = BUSINESS_UNITS.get(bu_id, {}).get("type", "")
+    sens = sensitivity.get(bu_id, {"economy": 0.3, "interest": 0.2, "competition": 0.3, "churn": 0.3})
 
-    # 사업부 유형별 민감도 차이 반영
-    fx_sensitivity = 0.3 if bu_type == "project" else 0.15  # EPC는 환율 영향 높음
-    material_sensitivity = 0.5 if bu_type == "project" else 0.2
+    # 매출 영향 계산
+    rev_impact = (economy_change / 100 * sens["economy"]
+                  + interest_change / 10 * sens["interest"] * -1  # 금리 상승 → 수요 감소
+                  + competition / 100 * sens["competition"]
+                  + churn_improve / 100 * sens["churn"] * -1)  # 이탈 개선 → 매출 증가
 
-    new_revenue = row["revenue"] * (1 + demand_change / 100 + price_adjust / 100)
-    new_cogs = row["cogs"] * (1 + material_change / 100 * material_sensitivity - cost_reduction / 100)
-    new_cogs *= (1 + fx_change / 100 * fx_sensitivity)  # 환율 → 원가 영향
+    new_revenue = row["revenue"] * (1 + rev_impact)
+    new_cogs = row["cogs"] * (1 - cost_reduction / 100 * 0.3)
     new_opex = row["opex"] * (1 - cost_reduction / 100 * 0.5)
     new_ebitda = new_revenue - new_cogs - new_opex + row["ebitda"] - (row["revenue"] - row["cogs"] - row["opex"])
-    new_capex = row["capex"] * (1 + capex_adjust / 100)
+    new_capex = row["capex"] + new_biz_invest / len(BUSINESS_UNITS)
 
     results.append({
-        "사업부": bu_name,
+        "계열사": bu_name,
         "Base 매출": round(row["revenue"], 1),
         "시나리오 매출": round(new_revenue, 1),
         "매출 변동(%)": round((new_revenue / row["revenue"] - 1) * 100, 1),
@@ -90,15 +100,15 @@ for bu_id, row in base.iterrows():
 
 result_df = pd.DataFrame(results)
 
-# 전사 합계
+# 연결 합계
 totals = result_df[["Base 매출", "시나리오 매출", "Base EBITDA", "시나리오 EBITDA", "CAPEX"]].sum()
 
 c1, c2, c3 = st.columns(3)
 rev_delta = totals["시나리오 매출"] - totals["Base 매출"]
 ebitda_delta = totals["시나리오 EBITDA"] - totals["Base EBITDA"]
-c1.metric("전사 매출 (월평균)", f'{totals["시나리오 매출"]:,.0f} 억원', f"{rev_delta:+,.0f}")
-c2.metric("전사 EBITDA (월평균)", f'{totals["시나리오 EBITDA"]:,.0f} 억원', f"{ebitda_delta:+,.0f}")
-c3.metric("전사 CAPEX (월평균)", f'{totals["CAPEX"]:,.0f} 억원')
+c1.metric("연결매출 (월평균)", f'{totals["시나리오 매출"]:,.0f} 억원', f"{rev_delta:+,.0f}")
+c2.metric("연결EBITDA (월평균)", f'{totals["시나리오 EBITDA"]:,.0f} 억원', f"{ebitda_delta:+,.0f}")
+c3.metric("연결CAPEX (월평균)", f'{totals["CAPEX"]:,.0f} 억원')
 
 st.dataframe(result_df, use_container_width=True, hide_index=True)
 
@@ -106,26 +116,26 @@ st.dataframe(result_df, use_container_width=True, hide_index=True)
 col1, col2 = st.columns(2)
 with col1:
     fig = go.Figure()
-    fig.add_trace(go.Bar(x=result_df["사업부"], y=result_df["Base EBITDA"], name="Base", marker_color="#D6E4F0"))
-    fig.add_trace(go.Bar(x=result_df["사업부"], y=result_df["시나리오 EBITDA"], name="시나리오", marker_color="#2F5496"))
+    fig.add_trace(go.Bar(x=result_df["계열사"], y=result_df["Base EBITDA"], name="Base", marker_color="#D6E4F0"))
+    fig.add_trace(go.Bar(x=result_df["계열사"], y=result_df["시나리오 EBITDA"], name="시나리오", marker_color="#2F5496"))
     fig.update_layout(title="EBITDA 비교 (Base vs 시나리오)", barmode="group", height=350)
     st.plotly_chart(fig, use_container_width=True)
 
 with col2:
-    # 민감도 히트맵
-    variables = ["환율", "원자재", "수요", "비용절감", "CAPEX", "판매가"]
-    bus = list(result_df["사업부"])
+    # 민감도 히트맵 (지주사 맞춤)
+    variables = ["경기변동", "금리", "경쟁심화", "이탈률", "비용절감"]
+    bus = list(result_df["계열사"])
 
-    # 간단한 민감도 계산 (±5% 영향도)
-    sensitivity = np.array([
-        [0.3, 0.5, 0.8, 0.3, 0.2, 0.7],   # EPC
-        [0.15, 0.2, 0.6, 0.4, 0.7, 0.5],   # Green
-        [0.15, 0.3, 0.5, 0.5, 0.5, 0.4],   # Recycling
-        [0.1, 0.15, 0.7, 0.3, 0.2, 0.8],   # Solution
+    sensitivity_matrix = np.array([
+        [0.3, 0.15, 0.5, 0.6, 0.4],  # SK매직
+        [0.4, 0.40, 0.3, 0.4, 0.3],  # SK렌터카
+        [0.5, 0.10, 0.4, 0.2, 0.3],  # 민팃
+        [0.7, 0.10, 0.3, 0.1, 0.5],  # 워커힐
+        [0.2, 0.05, 0.4, 0.3, 0.3],  # SK네트웍스서비스
     ])
     fig2 = go.Figure(go.Heatmap(
-        z=sensitivity, x=variables, y=bus,
-        colorscale="RdYlGn_r", text=np.round(sensitivity, 2), texttemplate="%{text}",
+        z=sensitivity_matrix, x=variables, y=bus,
+        colorscale="RdYlGn_r", text=np.round(sensitivity_matrix, 2), texttemplate="%{text}",
     ))
-    fig2.update_layout(title="민감도 히트맵 (변수 → 사업부 영향도)", height=350)
+    fig2.update_layout(title="민감도 히트맵 (변수 → 계열사 영향도)", height=350)
     st.plotly_chart(fig2, use_container_width=True)

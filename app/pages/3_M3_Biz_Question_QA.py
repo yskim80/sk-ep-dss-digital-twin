@@ -9,9 +9,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from db.models import SessionLocal, BizQuestion, Financial, KPIValue, KPIDefinition, RiskItem
 from config.settings import DECISION_AREAS, BUSINESS_UNITS
 
-st.set_page_config(page_title="M3. Biz Q&A", page_icon="<C2><AC>", layout="wide")
-st.title("M3. Biz Question Q&A")
-st.caption("Claude API 기반 - 경영진 비즈니스 질문에 데이터 기반 답변 제공")
+st.set_page_config(page_title="M3. Biz Q&A", page_icon="💬", layout="wide")
+st.title("💬 M3. Biz Question Q&A")
+st.caption("Claude API 기반 - SK네트웍스 지주사 경영진 비즈니스 질문에 데이터 기반 답변 제공")
 
 
 # ── Session state init ──
@@ -161,10 +161,10 @@ with tab1:
     st.markdown("**빠른 질문:**")
     quick_cols = st.columns(4)
     quick_questions = [
-        ("EBITDA Gap 분석", "이번 달 EBITDA 목표 대비 편차는 어느 사업부에서 발생했으며 주요 원인은?"),
-        ("수주잔고 전망", "수주잔고 추이와 향후 매출 전환 전망은?"),
+        ("연결EBITDA Gap", "이번 달 연결 EBITDA 목표 대비 편차는 어느 계열사에서 발생했으며 주요 원인은?"),
+        ("구독/이탈률", "구독/렌탈 이탈률(Churn) 추이와 이탈 원인 분석은?"),
         ("리스크 현황", "현재 가장 위험도가 높은 리스크 항목은 무엇이며 대응 방안은?"),
-        ("투자 ROI 현황", "투자 집행률과 NPV/IRR이 기준 이하인 프로젝트는?"),
+        ("포트폴리오 가치", "계열사 포트폴리오 가치 변동과 지분법이익 현황은?"),
     ]
 
     selected_quick = None
@@ -181,7 +181,7 @@ with tab1:
             st.markdown(msg["content"])
 
     # 질문 입력
-    user_input = st.chat_input("경영진 질문을 입력하세요 (예: 이번 분기 매출 목표 달성이 어려운 사업부는?)")
+    user_input = st.chat_input("경영진 질문을 입력하세요 (예: 이번 분기 매출 목표 달성이 어려운 계열사는?)")
 
     # 빠른 질문 선택 시 처리
     if selected_quick:
@@ -364,7 +364,7 @@ def _generate_fallback_answer(question: str, fin_df, kpi_df, risk_df) -> str:
 
     # EBITDA/매출/실적 관련
     if any(kw in q_lower for kw in ["ebitda", "매출", "실적", "목표", "편차", "gap"]):
-        parts.append("### 사업부별 실적 vs 계획\n")
+        parts.append("### 계열사별 실적 vs 계획\n")
         for _, row in latest.iterrows():
             rev_gap = (row["revenue"] / row["plan_revenue"] - 1) * 100 if row["plan_revenue"] else 0
             ebitda_gap = (row["ebitda"] / row["plan_ebitda"] - 1) * 100 if row["plan_ebitda"] else 0
@@ -393,13 +393,13 @@ def _generate_fallback_answer(question: str, fin_df, kpi_df, risk_df) -> str:
 
     # 수주/잔고 관련
     elif any(kw in q_lower for kw in ["수주", "잔고", "backlog"]):
-        parts.append("### 사업부별 수주잔고\n")
+        parts.append("### 계열사별 계약잔고\n")
         for _, row in latest.iterrows():
             parts.append(f"- **{row['bu_name']}**: 수주잔고 {row['backlog']:,.0f}억")
 
     # 투자 관련
     elif any(kw in q_lower for kw in ["투자", "capex", "npv", "irr"]):
-        parts.append("### 사업부별 CAPEX\n")
+        parts.append("### 계열사별 CAPEX\n")
         for _, row in latest.iterrows():
             parts.append(f"- **{row['bu_name']}**: CAPEX {row['capex']:,.0f}억")
         if not kpi_df.empty:

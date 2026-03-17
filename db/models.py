@@ -1,6 +1,6 @@
 """
-SK에코플랜트 DSS - 데이터베이스 모델 (SQLAlchemy ORM)
-실제 전환 시 스키마를 그대로 활용할 수 있도록 설계
+SK네트웍스 DSS - 데이터베이스 모델 (SQLAlchemy ORM)
+지주사 관점 계열사 관리 - EVM 테이블 제외
 """
 from sqlalchemy import (
     create_engine, Column, Integer, String, Float, Date, DateTime,
@@ -19,12 +19,12 @@ Base = declarative_base()
 
 
 class BusinessUnit(Base):
-    """사업부/계열사"""
+    """계열사"""
     __tablename__ = "business_units"
 
     id = Column(String(20), primary_key=True)
     name = Column(String(100), nullable=False)
-    biz_type = Column(String(20))  # project, asset, service
+    biz_type = Column(String(20))  # subscription, asset, platform, service
     parent_id = Column(String(20), ForeignKey("business_units.id"), nullable=True)
     is_active = Column(Boolean, default=True)
 
@@ -39,18 +39,18 @@ class Financial(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     bu_id = Column(String(20), ForeignKey("business_units.id"), nullable=False)
-    period = Column(Date, nullable=False)  # 월초 날짜
-    revenue = Column(Float)           # 매출 (억원)
-    cogs = Column(Float)              # 매출원가
-    gross_profit = Column(Float)      # 매출총이익
-    opex = Column(Float)              # 판관비
-    ebitda = Column(Float)            # EBITDA
-    ebit = Column(Float)              # 영업이익
-    capex = Column(Float)             # 투자지출
-    operating_cf = Column(Float)      # 영업현금흐름
-    backlog = Column(Float)           # 수주잔고
-    plan_revenue = Column(Float)      # 계획 매출
-    plan_ebitda = Column(Float)       # 계획 EBITDA
+    period = Column(Date, nullable=False)
+    revenue = Column(Float)
+    cogs = Column(Float)
+    gross_profit = Column(Float)
+    opex = Column(Float)
+    ebitda = Column(Float)
+    ebit = Column(Float)
+    capex = Column(Float)
+    operating_cf = Column(Float)
+    backlog = Column(Float)           # 계약잔고 (렌탈/구독)
+    plan_revenue = Column(Float)
+    plan_ebitda = Column(Float)
 
     business_unit = relationship("BusinessUnit", back_populates="financials")
 
@@ -61,11 +61,11 @@ class KPIDefinition(Base):
 
     id = Column(String(30), primary_key=True)
     name = Column(String(100), nullable=False)
-    category = Column(String(30))     # performance, operation, investment, risk
-    unit = Column(String(20))         # 억원, %, 일, 건
-    formula = Column(Text)            # 산식
+    category = Column(String(30))
+    unit = Column(String(20))
+    formula = Column(Text)
     parent_kpi_id = Column(String(30), ForeignKey("kpi_definitions.id"), nullable=True)
-    level = Column(Integer, default=0)  # Driver Tree 깊이
+    level = Column(Integer, default=0)
     description = Column(Text)
 
     values = relationship("KPIValue", back_populates="kpi_def")
@@ -82,8 +82,8 @@ class KPIValue(Base):
     period = Column(Date, nullable=False)
     actual = Column(Float)
     plan = Column(Float)
-    gap = Column(Float)      # actual - plan
-    gap_pct = Column(Float)  # gap / plan
+    gap = Column(Float)
+    gap_pct = Column(Float)
 
     kpi_def = relationship("KPIDefinition", back_populates="values")
     business_unit = relationship("BusinessUnit", back_populates="kpis")
@@ -94,12 +94,12 @@ class BizQuestion(Base):
     __tablename__ = "biz_questions"
 
     id = Column(String(20), primary_key=True)
-    decision_area = Column(String(20))  # performance, operation, investment, risk
+    decision_area = Column(String(20))
     question = Column(Text, nullable=False)
     trigger_condition = Column(Text)
-    answer_type = Column(String(30))  # snapshot, driver_tree, early_warning, what_if
-    required_kpis = Column(Text)      # comma-separated KPI IDs
-    priority = Column(Integer, default=3)  # 1=highest
+    answer_type = Column(String(30))
+    required_kpis = Column(Text)
+    priority = Column(Integer, default=3)
     status = Column(String(20), default="defined")
 
 
@@ -109,11 +109,11 @@ class RiskItem(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     bu_id = Column(String(20), ForeignKey("business_units.id"), nullable=False)
-    category = Column(String(30))     # market, operational, regulatory, financial
+    category = Column(String(30))
     description = Column(Text)
-    probability = Column(Float)       # 0-1
-    impact = Column(Float)            # 0-1
-    risk_score = Column(Float)        # probability * impact
+    probability = Column(Float)
+    impact = Column(Float)
+    risk_score = Column(Float)
     status = Column(String(20), default="active")
     detected_at = Column(DateTime, default=datetime.now)
     threshold_kpi_id = Column(String(30), ForeignKey("kpi_definitions.id"), nullable=True)
@@ -121,63 +121,47 @@ class RiskItem(Base):
     business_unit = relationship("BusinessUnit", back_populates="risks")
 
 
-class Project(Base):
-    """EPC 프로젝트 마스터"""
-    __tablename__ = "projects"
+class PortfolioHolding(Base):
+    """투자 포트폴리오 - 계열사별 지분/투자 현황"""
+    __tablename__ = "portfolio_holdings"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    bu_id = Column(String(20), ForeignKey("business_units.id"), nullable=False)
+    period = Column(Date, nullable=False)
+    stake_pct = Column(Float)           # 지분율 (%)
+    book_value = Column(Float)          # 장부가 (억원)
+    fair_value = Column(Float)          # 공정가치 (억원)
+    invested_amount = Column(Float)     # 누적투자금 (억원)
+    equity_income = Column(Float)       # 지분법이익 (억원)
+    dividend_received = Column(Float)   # 수취배당 (억원)
+    roic = Column(Float)               # ROIC (%)
+    irr = Column(Float)                # IRR (%)
+    category = Column(String(30))       # core, growth, new_biz
+    valuation_method = Column(String(30))  # DCF, EV_EBITDA, PER
+
+    business_unit = relationship("BusinessUnit")
+
+
+class InvestmentProject(Base):
+    """신규 투자 프로젝트 트래커"""
+    __tablename__ = "investment_projects"
 
     id = Column(String(20), primary_key=True)
     name = Column(String(200), nullable=False)
-    bu_id = Column(String(20), ForeignKey("business_units.id"), nullable=False)
-    project_type = Column(String(30))      # semiconductor, battery, display, pharma, energy
-    client = Column(String(100))
-    contract_value = Column(Float)         # 계약금액 (억원)
+    bu_id = Column(String(20), ForeignKey("business_units.id"), nullable=True)
+    category = Column(String(30))       # organic, MA, JV, strategic
+    total_budget = Column(Float)        # 총 투자예산 (억원)
+    spent_amount = Column(Float)        # 집행액 (억원)
+    expected_irr = Column(Float)        # 기대 IRR (%)
+    expected_payback = Column(Float)    # 기대 회수기간 (년)
     start_date = Column(Date)
-    end_date = Column(Date)                # 계획 준공일
-    duration_months = Column(Integer)      # 총 공기 (개월)
-    status = Column(String(20), default="active")  # active, completed, delayed, at_risk
-    bac = Column(Float)                    # Budget At Completion (억원)
+    target_completion = Column(Date)
+    status = Column(String(20))         # planning, in_progress, completed, on_hold
+    risk_level = Column(String(10))     # low, medium, high
+    description = Column(Text)
+    stage = Column(String(30))          # ideation, feasibility, execution, monitoring
 
     business_unit = relationship("BusinessUnit")
-    evm_data = relationship("EVMMonthly", back_populates="project")
-
-
-class EVMMonthly(Base):
-    """EVM 월별 시계열 데이터"""
-    __tablename__ = "evm_monthly"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    project_id = Column(String(20), ForeignKey("projects.id"), nullable=False)
-    period = Column(Date, nullable=False)           # 측정 월
-    month_seq = Column(Integer)                     # 프로젝트 시작 후 경과 월
-
-    # Core EVM metrics
-    pv = Column(Float)              # Planned Value (BCWS) - 계획 공정률 기반 누적
-    ev = Column(Float)              # Earned Value (BCWP) - 실적 공정률 기반 누적
-    ac = Column(Float)              # Actual Cost (ACWP) - 실제 투입 원가 누적
-
-    # Schedule metrics
-    pv_rate = Column(Float)         # 계획 공정률 (%)
-    ev_rate = Column(Float)         # 실적 공정률 (%)
-
-    # Derived (computed from PV/EV/AC)
-    sv = Column(Float)              # Schedule Variance = EV - PV
-    cv = Column(Float)              # Cost Variance = EV - AC
-    spi = Column(Float)             # Schedule Performance Index = EV / PV
-    cpi = Column(Float)             # Cost Performance Index = EV / AC
-
-    # Earned Schedule
-    es = Column(Float)              # Earned Schedule (개월) - EV가 PV와 만나는 시점
-    ed = Column(Float)              # Earned Duration (개월) - 실제 경과 기간
-    es_spi_t = Column(Float)        # SPI(t) = ES / AT (시간 기반 SPI)
-
-    # Forecasting
-    eac = Column(Float)             # Estimate At Completion = BAC / CPI
-    etc = Column(Float)             # Estimate To Complete = EAC - AC
-    vac = Column(Float)             # Variance At Completion = BAC - EAC
-    ieac_t = Column(Float)          # Independent EAC(t) = PD / SPI(t) (일정 기반)
-    tcpi = Column(Float)            # To-Complete Performance Index = (BAC-EV)/(BAC-AC)
-
-    project = relationship("Project", back_populates="evm_data")
 
 
 class ScenarioRun(Base):
@@ -187,8 +171,8 @@ class ScenarioRun(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(200))
     description = Column(Text)
-    parameters = Column(Text)         # JSON string
-    results = Column(Text)            # JSON string
+    parameters = Column(Text)
+    results = Column(Text)
     created_at = Column(DateTime, default=datetime.now)
     created_by = Column(String(50))
 

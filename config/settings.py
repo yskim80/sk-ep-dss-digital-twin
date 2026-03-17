@@ -1,5 +1,6 @@
 """
-SK에코플랜트 Decision Intelligence - 디지털 트윈 설정
+SK네트웍스 Decision Intelligence - 디지털 트윈 설정
+지주사(Holding Company) 관점 - 계열사 관리 목적
 """
 import os
 from pathlib import Path
@@ -10,17 +11,18 @@ DATA_DIR = BASE_DIR / "data"
 DB_DIR = BASE_DIR / "db"
 
 # Database
-DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{DB_DIR / 'ecoplant_dss.db'}")
+DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{DB_DIR / 'skn_dss.db'}")
 
-# Business Structure - SK에코플랜트 사업구조 반영
+# Business Structure - SK네트웍스 계열사 구조
 BUSINESS_UNITS = {
-    "EPC_Hitech": {"name": "Hi-tech EPC", "type": "project", "color": "#2F5496"},
-    "GreenEnergy": {"name": "Green Energy", "type": "asset", "color": "#548235"},
-    "Recycling": {"name": "Recycling", "type": "asset", "color": "#BF8F00"},
-    "Solution": {"name": "Solution", "type": "service", "color": "#7030A0"},
+    "SK_Magic": {"name": "SK매직", "type": "subscription", "color": "#2F5496"},
+    "SK_Rentacar": {"name": "SK렌터카", "type": "asset", "color": "#548235"},
+    "Mintit": {"name": "민팃", "type": "platform", "color": "#BF8F00"},
+    "Walkerhill": {"name": "워커힐", "type": "service", "color": "#7030A0"},
+    "SKN_Service": {"name": "SK네트웍스서비스", "type": "service", "color": "#C00000"},
 }
 
-# 4대 의사결정 관리 영역
+# 4대 의사결정 관리 영역 (지주사 관점)
 DECISION_AREAS = {
     "performance": "성과 관리 (Performance)",
     "operation": "운영 관리 (Operation)",
@@ -35,7 +37,7 @@ MODULES = {
     "M3": "Biz Question Q&A",
     "M4": "Scenario / What-if Simulation",
     "M5": "Early Warning Center",
-    "M6": "EVM Monitor",
+    "M6": "Portfolio Management",
 }
 
 # Demo data config
